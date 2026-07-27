@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>株信用チェッカー｜信用残・信用倍率検索</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --text: #1a2233;
+    --muted: #67748c;
+    --line: #e3e8f0;
+    --accent: #2563eb;
+    --accent-soft: #eaf1fe;
+    --up: #d92c2c;      /* 増加 = 赤 (国内慣習) */
+    --up-soft: #fdeeee;
+    --down: #0f8a4b;    /* 減少 = 緑 */
+    --down-soft: #eaf6f0;
+    --shadow: 0 1px 3px rgba(15, 30, 60, .08), 0 8px 24px rgba(15, 30, 60, .06);
+    --series-buy: #2a78d6;   /* グラフ: 買い残 */
+    --series-sell: #eb6834;  /* グラフ: 売り残 */
+    --series-price: #4a3aa7; /* グラフ: 株価 */
+    --grid: #e7ebf2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10151f;
+      --card: #1a2130;
+      --text: #e8ecf4;
+      --muted: #93a0b8;
+      --line: #2a3348;
+      --accent: #5b93f5;
+      --accent-soft: #1d2a44;
+      --up: #ff6b6b;
+      --up-soft: #3a2226;
+      --down: #3ecf8e;
+      --down-soft: #16342a;
+      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+      --series-buy: #3987e5;
+      --series-sell: #d95926;
+      --series-price: #9085e9;
+      --grid: #252e42;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+
+  header.site { text-align: center; padding: 24px 0 20px; }
+  header.site h1 { font-size: 26px; letter-spacing: .04em; }
+  header.site h1 .icon { margin-right: 8px; }
+  header.site p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  /* 検索欄 */
+  .searchbox {
+    display: flex; gap: 8px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px;
+    box-shadow: var(--shadow);
+  }
+  .searchbox input {
+    flex: 1;
+    border: none; outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 17px;
+    padding: 8px 10px;
+  }
+  .searchbox button {
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 10px 22px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .searchbox button:hover { opacity: .85; }
+  .hint { color: var(--muted); font-size: 12px; margin: 8px 4px 0; }
+
+  /* 状態表示 */
+  .status { margin: 28px 0; text-align: center; color: var(--muted); font-size: 15px; }
+  .status.error { color: var(--up); }
+  .spinner {
+    display: inline-block; width: 18px; height: 18px;
+    border: 3px solid var(--line); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite;
+    vertical-align: -4px; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 検索候補 */
+  .candidates { margin-top: 20px; display: none; }
+  .candidates h2 { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+  .candidates ul { list-style: none; }
+  .candidates li {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 12px;
+    transition: border-color .15s, transform .1s;
+  }
+  .candidates li:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .candidates .ccode {
+    font-weight: 700; color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px; padding: 2px 10px; font-size: 14px;
+  }
+  .candidates .cname { flex: 1; font-weight: 600; }
+  .candidates .cmarket { color: var(--muted); font-size: 12px; }
+
+  /* 結果 */
+  #result { display: none; margin-top: 28px; }
+  .stock-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .stock-head .scode {
+    font-size: 15px; font-weight: 700; color: var(--accent);
+    background: var(--accent-soft); border-radius: 8px; padding: 2px 12px;
+  }
+  .stock-head .sname { font-size: 22px; font-weight: 700; }
+  .stock-head .sdate { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  /* 決算発表予定日 */
+  .earnings {
+    display: none;
+    align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--accent-soft);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin-bottom: 14px;
+  }
+  .earnings-ico { font-size: 16px; }
+  .earnings-label { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .earnings-date { font-size: 17px; font-weight: 700; color: var(--text); }
+  .earnings-countdown {
+    font-size: 12px; font-weight: 700;
+    color: var(--accent); background: var(--card);
+    border-radius: 8px; padding: 3px 10px;
+  }
+  .earnings-countdown.soon { color: var(--up); background: var(--up-soft); }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+  }
+  .cards-price { margin-bottom: 14px; }
+
+  /* 株価レンジ (年初来高値/安値) */
+  .card-range .range-vals {
+    display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 10px;
+  }
+  .range-item { display: flex; align-items: baseline; gap: 8px; }
+  .range-tag {
+    font-size: 12px; font-weight: 700; border-radius: 6px; padding: 2px 8px;
+  }
+  .range-tag.high { color: var(--up); background: var(--up-soft); }
+  .range-tag.low  { color: var(--down); background: var(--down-soft); }
+  .range-price { font-size: 21px; font-weight: 700; letter-spacing: .01em; }
+  .range-price::after { content: "円"; font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+  .range-date { font-size: 12px; color: var(--muted); }
+  .range-bar {
+    position: relative; height: 8px; border-radius: 5px;
+    margin: 16px 4px 0;
+    background: linear-gradient(90deg, var(--down) 0%, var(--line) 50%, var(--up) 100%);
+    opacity: .35;
+  }
+  .range-bar-marker {
+    position: absolute; top: -4px; width: 3px; height: 16px;
+    border-radius: 2px; background: var(--text);
+    transform: translateX(-50%);
+  }
+  .range-now { font-size: 12px; color: var(--muted); margin: 8px 4px 0; text-align: center; }
+  .range-now b { color: var(--text); font-weight: 700; }
+  .range-sub { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+  .range-block + .range-block {
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .card .label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .card .value { font-size: 28px; font-weight: 700; margin-top: 4px; letter-spacing: .01em; }
+  .card .value .unit { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+  .card .sub { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip {
+    display: inline-block;
+    font-size: 13px; font-weight: 700;
+    border-radius: 8px; padding: 3px 10px;
+  }
+  .chip.up   { color: var(--up);   background: var(--up-soft); }
+  .chip.down { color: var(--down); background: var(--down-soft); }
+  .chip.flat { color: var(--muted); background: var(--bg); }
+  .sub .sublabel { font-size: 12px; color: var(--muted); }
+
+  /* 推移グラフ */
+  .chart-section { margin-top: 26px; }
+  .chart-section h2 { font-size: 16px; margin-bottom: 6px; }
+  .chart-note { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 16px 18px 10px;
+    position: relative;
+  }
+  #chartHost svg { display: block; width: 100%; height: auto; }
+  #chartTip {
+    position: absolute; display: none; pointer-events: none;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow);
+    padding: 8px 12px; font-size: 12px; line-height: 1.7; z-index: 5;
+    min-width: 150px;
+  }
+  #chartTip .tdate { font-weight: 700; color: var(--text); }
+  #chartTip .trow { display: flex; justify-content: space-between; gap: 14px; color: var(--muted); }
+  #chartTip .trow b { color: var(--text); font-weight: 600; }
+  #chartTip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+
+  /* 履歴テーブル */
+  .history { margin-top: 26px; }
+  .history h2 { font-size: 16px; margin-bottom: 10px; }
+  .tablewrap {
+    overflow-x: auto;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+  }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+  th, td { padding: 10px 14px; text-align: right; white-space: nowrap; }
+  thead th {
+    background: transparent;
+    color: var(--muted); font-size: 12px; font-weight: 600;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody th { text-align: left; font-weight: 600; }
+  tbody tr { border-bottom: 1px solid var(--line); }
+  tbody tr:last-child { border-bottom: none; }
+  td.up { color: var(--up); }
+  td.down { color: var(--down); }
+  td .pct { font-size: 12px; opacity: .85; margin-left: 4px; }
+
+  footer.note { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  footer.note a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="site">
+    <h1><span class="icon">📊</span>株信用チェッカー</h1>
+    <p>信用買い残・売り残・信用倍率・前週比をまとめて確認</p>
+  </header>
+
+  <form class="searchbox" id="searchForm">
+    <input id="searchInput" type="text" placeholder="銘柄コード または 銘柄名 (例: 7203 / トヨタ)"
+           autocomplete="off" autofocus>
+    <button type="submit">検索</button>
+  </form>
+  <p class="hint">※ 信用残データは東証発表にもとづく週1回(毎週第2営業日ごろ)の更新です</p>
+
+  <div class="status" id="status"></div>
+
+  <section class="candidates" id="candidates">
+    <h2 id="candidatesTitle">検索結果 — 銘柄を選択してください</h2>
+    <ul id="candidateList"></ul>
+  </section>
+
+  <section id="result">
+    <div class="stock-head">
+      <span class="scode" id="rCode"></span>
+      <span class="sname" id="rName"></span>
+      <span class="sdate" id="rDate"></span>
+    </div>
+
+    <div class="earnings" id="earnings">
+      <span class="earnings-ico">📅</span>
+      <span class="earnings-label">決算発表予定日</span>
+      <span class="earnings-date" id="earningsDate"></span>
+      <span class="earnings-countdown" id="earningsCountdown"></span>
+    </div>
+
+    <div class="cards cards-price">
+      <div class="card card-range">
+        <div class="label">株価レンジ</div>
+
+        <div class="range-block" id="atBlock">
+          <div class="range-sub">上場来 (上場時からの高値・安値)</div>
+          <div class="range-vals">
+            <div class="range-item">
+              <span class="range-tag high">上場来高値</span>
+              <span class="range-price" id="atHighVal"></span>
+              <span class="range-date" id="atHighDate"></span>
+            </div>
+            <div class="range-item">
+              <span class="range-tag low">上場来安値</span>
+              <span class="range-price" id="atLowVal"></span>
+              <span class="range-date" id="atLowDate"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="range-block" id="yrBlock">
+          <div class="range-sub">年初来</div>
+          <div class="range-vals">
+            <div class="range-item">
+              <span class="range-tag high">年初来高値</span>
+              <span class="range-price" id="yearHighVal"></span>
+              <span class="range-date" id="yearHighDate"></span>
+            </div>
+            <div class="range-item">
+              <span class="range-tag low">年初来安値</span>
+              <span class="range-price" id="yearLowVal"></span>
+              <span class="range-date" id="yearLowDate"></span>
+            </div>
+          </div>
+          <div class="range-bar" id="rangeBar"><div class="range-bar-marker" id="rangeBarMarker"></div></div>
+          <div class="range-now" id="rangeNow"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="label">信用買い残</div>
+        <div class="value"><span id="buyVal"></span><span class="unit">株</span></div>
+        <div class="sub">
+          <span class="sublabel">前週比</span>
+          <span class="chip" id="buyChg"></span>
+          <span class="chip" id="buyPct"></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">信用売り残</div>
+        <div class="value"><span id="sellVal"></span><span class="unit">株</span></div>
+        <div class="sub">
+          <span class="sublabel">前週比</span>
+          <span class="chip" id="sellChg"></span>
+          <span class="chip" id="sellPct"></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">信用倍率 (買い残 ÷ 売り残)</div>
+        <div class="value"><span id="ratioVal"></span><span class="unit">倍</span></div>
+        <div class="sub">
+          <span class="sublabel">前週</span>
+          <span class="chip flat" id="ratioPrev"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-section">
+      <h2>信用残・株価の推移グラフ</h2>
+      <p class="chart-note">買い残・売り残・株価を上下に分けて表示しています(桁が違うため縦軸はそれぞれ独立)。株価は各週の申込日の終値です。グラフにマウスを合わせると各週の数値が出ます。</p>
+      <div class="chart-card">
+        <div id="chartHost"></div>
+        <div id="chartTip"></div>
+      </div>
+    </div>
+
+    <div class="history">
+      <h2>信用残の推移 (週次・直近26週)</h2>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left">日付</th>
+              <th>株価 (終値)</th>
+              <th>買い残 (株)</th>
+              <th>前週比 (買い)</th>
+              <th>売り残 (株)</th>
+              <th>前週比 (売り)</th>
+              <th>信用倍率</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer class="note">
+      データ出典: <a id="srcLink" href="#" target="_blank" rel="noopener">Yahoo!ファイナンス 信用残時系列</a>。
+      表示は取得時点の情報であり、投資判断は自己責任でお願いします。
+    </footer>
+  </section>
+
+</div>
+
+<script src="config.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => n == null ? "―" : n.toLocaleString("ja-JP");
+
+function setStatus(msg, isError = false, loading = false) {
+  const el = $("status");
+  el.className = "status" + (isError ? " error" : "");
+  el.innerHTML = loading ? '<span class="spinner"></span>' + msg : msg;
+}
+
+function chip(el, num, unit, alwaysSign) {
+  if (num == null) {
+    el.textContent = "―";
+    el.className = "chip flat";
+    return;
+  }
+  const sign = num > 0 ? "+" : "";
+  el.textContent = sign + num.toLocaleString("ja-JP", { maximumFractionDigits: 2 }) + unit;
+  el.className = "chip " + (num > 0 ? "up" : num < 0 ? "down" : "flat");
+}
+
+function changeCell(chg, pct) {
+  if (chg == null) return '<td>―</td>';
+  const cls = chg > 0 ? "up" : chg < 0 ? "down" : "";
+  const sign = chg > 0 ? "+" : "";
+  const pctStr = pct == null ? "" :
+    `<span class="pct">(${pct > 0 ? "+" : ""}${pct.toFixed(1)}%)</span>`;
+  return `<td class="${cls}">${sign}${fmt(chg)}${pctStr}</td>`;
+}
+
+function showResult(data) {
+  const latest = data.rows[0];
+  const prev = data.rows[1];
+
+  $("rCode").textContent = data.code;
+  $("rName").textContent = data.name;
+  $("rDate").textContent = latest.date + " 申込時点";
+
+  showRange(data);
+  showEarnings(data.earnings);
+
+  $("buyVal").textContent = fmt(latest.buy);
+  chip($("buyChg"), latest.buyChange, " 株");
+  chip($("buyPct"), latest.buyPct == null ? null : Math.round(latest.buyPct * 100) / 100, " %");
+
+  $("sellVal").textContent = fmt(latest.sell);
+  chip($("sellChg"), latest.sellChange, " 株");
+  chip($("sellPct"), latest.sellPct == null ? null : Math.round(latest.sellPct * 100) / 100, " %");
+
+  $("ratioVal").textContent = latest.ratio == null ? "―" : latest.ratio.toFixed(2);
+  $("ratioPrev").textContent = prev && prev.ratio != null ? prev.ratio.toFixed(2) + " 倍" : "―";
+
+  $("historyBody").innerHTML = data.rows.slice(0, 26).map((r) => `
+    <tr>
+      <th>${r.date}</th>
+      <td>${r.close == null ? "―" : fmt(r.close) + " 円"}</td>
+      <td>${fmt(r.buy)}</td>
+      ${changeCell(r.buyChange, r.buyPct)}
+      <td>${fmt(r.sell)}</td>
+      ${changeCell(r.sellChange, r.sellPct)}
+      <td>${r.ratio == null ? "―" : r.ratio.toFixed(2)}</td>
+    </tr>`).join("");
+
+  $("srcLink").href = data.source;
+  $("result").style.display = "block";
+  renderChart(data.rows.slice(0, 52)); // グラフは直近1年分まで
+}
+
+/* ---- 決算発表予定日 ---- */
+function showEarnings(e) {
+  const box = $("earnings");
+  if (!e || !e.iso) { box.style.display = "none"; return; }
+  box.style.display = "flex";
+
+  const wd = ["日", "月", "火", "水", "木", "金", "土"];
+  const d = new Date(e.iso + "T00:00:00");
+  $("earningsDate").textContent =
+    `${e.date}（${wd[d.getDay()]}）` + (e.planned ? " 予定" : "");
+
+  // 残り日数 (今日との差)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((d - today) / 86400000);
+  const cd = $("earningsCountdown");
+  cd.classList.remove("soon");
+  if (days > 0) {
+    cd.textContent = `あと${days}日`;
+    if (days <= 7) cd.classList.add("soon");
+  } else if (days === 0) {
+    cd.textContent = "本日";
+    cd.classList.add("soon");
+  } else {
+    cd.textContent = "発表済み";
+  }
+}
+
+/* ---- 株価レンジ (上場来 / 年初来の高値・安値) ---- */
+// 1つの高値安値ブロックを描画する共通関数
+function fillRangeBlock(ids, hi, lo, now, rangeLabel) {
+  const block = $(ids.block);
+  if (!hi || hi.value == null || !lo || lo.value == null) {
+    block.style.display = "none";
+    return false;
+  }
+  block.style.display = "";
+  $(ids.highVal).textContent = fmt(hi.value);
+  $(ids.lowVal).textContent = fmt(lo.value);
+  $(ids.highDate).textContent = hi.date ? "(" + hi.date + ")" : "";
+  $(ids.lowDate).textContent = lo.date ? "(" + lo.date + ")" : "";
+
+  if (now != null && hi.value > lo.value) {
+    const pct = Math.max(0, Math.min(1, (now - lo.value) / (hi.value - lo.value)));
+    $(ids.bar).style.display = "";
+    $(ids.marker).style.left = (pct * 100).toFixed(1) + "%";
+    $(ids.now).innerHTML =
+      `現在値 <b>${fmt(now)}円</b> ＝ ${rangeLabel}レンジの下から <b>${Math.round(pct * 100)}%</b> の位置`;
+  } else {
+    $(ids.bar).style.display = "none";
+    $(ids.now).textContent = "";
+  }
+  return true;
+}
+
+// 上場来ブロック: 分割前の額面ベースの値のため、現在値とのレンジバーは出さず値のみ表示
+function fillValuesOnly(ids, hi, lo) {
+  const block = $(ids.block);
+  if (!hi || hi.value == null || !lo || lo.value == null) {
+    block.style.display = "none";
+    return false;
+  }
+  block.style.display = "";
+  $(ids.highVal).textContent = fmt(hi.value);
+  $(ids.lowVal).textContent = fmt(lo.value);
+  $(ids.highDate).textContent = hi.date ? "(" + hi.date + ")" : "";
+  $(ids.lowDate).textContent = lo.date ? "(" + lo.date + ")" : "";
+  return true;
+}
+
+function showRange(data) {
+  const card = document.querySelector(".cards-price");
+  const now = data.price;
+
+  const atShown = fillValuesOnly(
+    { block: "atBlock", highVal: "atHighVal", lowVal: "atLowVal",
+      highDate: "atHighDate", lowDate: "atLowDate" },
+    data.allTimeHigh, data.allTimeLow
+  );
+
+  const yrShown = fillRangeBlock(
+    { block: "yrBlock", highVal: "yearHighVal", lowVal: "yearLowVal",
+      highDate: "yearHighDate", lowDate: "yearLowDate",
+      bar: "rangeBar", marker: "rangeBarMarker", now: "rangeNow" },
+    data.yearHigh, data.yearLow, now, "年初来"
+  );
+
+  card.style.display = atShown || yrShown ? "" : "none";
+}
+
+/* ---- 信用残推移グラフ (SVG 折れ線) ---- */
+let chartRows = null;
+
+function fmtAxis(n) {
+  if (n == null) return "";
+  const abs = Math.abs(n);
+  if (abs >= 1e8) return (n / 1e8).toLocaleString("ja-JP", { maximumFractionDigits: 1 }) + "億";
+  if (abs >= 1e4) return Math.round(n / 1e4).toLocaleString("ja-JP") + "万";
+  return n.toLocaleString("ja-JP");
+}
+
+function niceTicks(min, max, count) {
+  const span = max - min || Math.abs(max) || 1;
+  const step0 = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  let step = mag;
+  for (const m of [1, 2, 2.5, 5, 10]) if (step0 <= m * mag) { step = m * mag; break; }
+  const lo = Math.floor(min / step) * step;
+  const ticks = [];
+  for (let v = lo; v <= max + step * 0.5; v += step) if (v >= min - step * 0.5) ticks.push(v);
+  return ticks;
+}
+
+// 買い残・売り残は桁が違う(例: 2000万 vs 100万)ため同じ縦軸だと売り残が潰れる。
+// そこで上下2段(スモールマルチプル)にして、それぞれ独立した縦軸で描く。
+function renderChart(rows) {
+  chartRows = rows;
+  const host = $("chartHost");
+  const data = rows.slice().reverse().filter((r) => r.buy != null || r.sell != null);
+  if (data.length < 2) { host.innerHTML = ""; return; }
+
+  const css = getComputedStyle(document.documentElement);
+  const cBuy = css.getPropertyValue("--series-buy").trim();
+  const cSell = css.getPropertyValue("--series-sell").trim();
+  const cGrid = css.getPropertyValue("--grid").trim();
+  const cMuted = css.getPropertyValue("--muted").trim();
+  const cText = css.getPropertyValue("--text").trim();
+  const cCard = css.getPropertyValue("--card").trim();
+
+  // 表示するパネル(データがある系列のみ)。株価も1段追加する。
+  const specs = [
+    { key: "buy",   color: cBuy,   name: "信用買い残", unit: "株", zero: true },
+    { key: "sell",  color: cSell,  name: "信用売り残", unit: "株", zero: true },
+    { key: "close", color: css.getPropertyValue("--series-price").trim(),
+      name: "株価 (終値)", unit: "円", zero: false },
+  ].filter((s) => data.some((r) => r[s.key] != null));
+
+  const W = Math.max(host.clientWidth || 780, 320);
+  const mL = 52, mR = 14;           // 左: 縦軸ラベル / 右: 余白
+  const iw = W - mL - mR;
+  const titleH = 24, gap = 20, xAxisH = 26, mTop = 4;
+  const plotH = specs.length >= 3 ? 100 : 116;   // 3段のときは少し低く
+  const H = mTop + (titleH + plotH) * specs.length + gap * (specs.length - 1) + xAxisH;
+
+  const n = data.length;
+  const X = (i) => mL + (i * iw) / (n - 1);
+
+  // X軸ラベル(最大6個)
+  const xStep = Math.max(1, Math.ceil(n / 6));
+  const xLabels = [];
+  for (let i = 0; i < n; i += xStep) xLabels.push(i);
+  if (xLabels[xLabels.length - 1] !== n - 1) xLabels.push(n - 1);
+  const shortDate = (d) => d.replace(/^\d{4}\//, "");
+
+  const lastIdx = (key) => { for (let i = n - 1; i >= 0; i--) if (data[i][key] != null) return i; return -1; };
+  const panels = {}; // key -> {plotTop, plotBottom, Y}
+
+  function drawPanel(spec, plotTop) {
+    const { key, color, name, unit, zero } = spec;
+    const plotBottom = plotTop + plotH;
+    const vals = data.map((r) => r[key]).filter((v) => v != null);
+    let lo, hi;
+    if (zero) {                       // 残高: 0起点・上に余白
+      lo = 0; hi = Math.max(...vals) * 1.14 || 1;
+    } else {                          // 株価: 変動が見えるよう0起点にしない
+      const mn = Math.min(...vals), mx = Math.max(...vals);
+      const pad = (mx - mn || mx || 1) * 0.12;
+      lo = mn - pad; hi = mx + pad;
+    }
+    const Y = (v) => plotBottom - ((v - lo) / (hi - lo)) * plotH;
+    panels[key] = { plotTop, plotBottom, Y };
+
+    let s = "";
+    for (const t of niceTicks(lo, hi, zero ? 2 : 3).filter((t) => t >= lo && t <= hi)) {
+      const y = Y(t).toFixed(1);
+      s += `<line x1="${mL}" y1="${y}" x2="${W - mR}" y2="${y}" stroke="${cGrid}" stroke-width="1"/>`;
+      s += `<text x="${mL - 8}" y="${(Y(t) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="${cMuted}">${fmtAxis(t)}</text>`;
+    }
+    // ライン & 面塗り
+    let line = "", pen = false, first = null, last = null;
+    data.forEach((r, i) => {
+      if (r[key] == null) { pen = false; return; }
+      const x = X(i), y = Y(r[key]);
+      line += (pen ? "L" : "M") + x.toFixed(1) + "," + y.toFixed(1);
+      if (first === null) first = x;
+      last = x;
+      pen = true;
+    });
+    if (first !== null) {
+      s += `<path d="${line}L${last.toFixed(1)},${plotBottom}L${first.toFixed(1)},${plotBottom}Z" fill="${color}" fill-opacity="0.12"/>`;
+    }
+    s += `<path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    data.forEach((r, i) => {
+      if (r[key] == null) return;
+      s += `<circle cx="${X(i).toFixed(1)}" cy="${Y(r[key]).toFixed(1)}" r="2.4" fill="${color}"/>`;
+    });
+    // パネル見出し(系列名 + 最新値)
+    const li = lastIdx(key);
+    const latest = li >= 0 ? fmt(data[li][key]) + " " + unit : "―";
+    s += `<circle cx="${mL + 5}" cy="${plotTop - 9}" r="5" fill="${color}"/>`;
+    s += `<text x="${mL + 15}" y="${plotTop - 5}" font-size="13" font-weight="700" fill="${cText}">${name}</text>`;
+    s += `<text x="${W - mR}" y="${plotTop - 5}" text-anchor="end" font-size="12" fill="${cMuted}">最新 <tspan font-weight="700" fill="${cText}">${latest}</tspan></text>`;
+    return s;
+  }
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="買い残・売り残・株価の週次推移">`;
+  specs.forEach((spec, p) => {
+    const plotTop = mTop + titleH + p * (titleH + plotH + gap);
+    svg += drawPanel(spec, plotTop);
+  });
+
+  // X軸ラベル(最下段)
+  for (const i of xLabels) {
+    svg += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="${cMuted}">${shortDate(data[i].date)}</text>`;
+  }
+
+  // ホバー: 全パネルをまたぐ縦線 + 各ラインのドット
+  const crossTop = panels[specs[0].key].plotTop;
+  const crossBottom = panels[specs[specs.length - 1].key].plotBottom;
+  svg += `<line id="chartCross" x1="0" y1="${crossTop}" x2="0" y2="${crossBottom}" stroke="${cMuted}" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"/>`;
+  for (const spec of specs) {
+    svg += `<circle id="hover_${spec.key}" r="5" fill="${spec.color}" stroke="${cCard}" stroke-width="2" visibility="hidden"/>`;
+  }
+  svg += `<rect id="chartOverlay" x="${mL}" y="${crossTop}" width="${iw}" height="${crossBottom - crossTop}" fill="transparent"/>`;
+  svg += `</svg>`;
+
+  host.innerHTML = svg;
+
+  const overlay = document.getElementById("chartOverlay");
+  const cross = document.getElementById("chartCross");
+  const tip = $("chartTip");
+  const svgEl = host.querySelector("svg");
+
+  function onMove(ev) {
+    const rect = svgEl.getBoundingClientRect();
+    const scale = W / rect.width;
+    const px = (ev.clientX - rect.left) * scale;
+    let i = Math.round(((px - mL) / iw) * (n - 1));
+    i = Math.max(0, Math.min(n - 1, i));
+    const r = data[i];
+    const x = X(i);
+    cross.setAttribute("x1", x); cross.setAttribute("x2", x);
+    cross.setAttribute("visibility", "visible");
+    for (const spec of specs) {
+      const dot = document.getElementById("hover_" + spec.key);
+      if (r[spec.key] != null) {
+        dot.setAttribute("cx", x);
+        dot.setAttribute("cy", panels[spec.key].Y(r[spec.key]));
+        dot.setAttribute("visibility", "visible");
+      } else dot.setAttribute("visibility", "hidden");
+    }
+
+    tip.innerHTML =
+      `<div class="tdate">${r.date}</div>` +
+      `<div class="trow"><span><span class="dot" style="background:${cBuy}"></span>買い残</span><b>${fmt(r.buy)}</b></div>` +
+      `<div class="trow"><span><span class="dot" style="background:${cSell}"></span>売り残</span><b>${fmt(r.sell)}</b></div>` +
+      `<div class="trow"><span>信用倍率</span><b>${r.ratio == null ? "―" : r.ratio.toFixed(2) + " 倍"}</b></div>` +
+      `<div class="trow"><span><span class="dot" style="background:${css.getPropertyValue("--series-price").trim()}"></span>株価</span><b>${r.close == null ? "―" : fmt(r.close) + " 円"}</b></div>`;
+    tip.style.display = "block";
+    const card = tip.parentElement;
+    const cardRect = card.getBoundingClientRect();
+    let tx = ev.clientX - cardRect.left + 14;
+    if (tx + tip.offsetWidth > cardRect.width - 8) tx = ev.clientX - cardRect.left - tip.offsetWidth - 14;
+    let ty = ev.clientY - cardRect.top - tip.offsetHeight - 10;
+    if (ty < 4) ty = ev.clientY - cardRect.top + 16;
+    tip.style.left = tx + "px";
+    tip.style.top = ty + "px";
+  }
+  function onLeave() {
+    cross.setAttribute("visibility", "hidden");
+    for (const spec of specs) document.getElementById("hover_" + spec.key).setAttribute("visibility", "hidden");
+    tip.style.display = "none";
+  }
+  overlay.addEventListener("pointermove", onMove);
+  overlay.addEventListener("pointerleave", onLeave);
+}
+
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  if (!chartRows) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => renderChart(chartRows), 150);
+});
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (chartRows) renderChart(chartRows);
+});
+
+/* ---- データ取得元の決定 ----
+   1. localhost で server.js が動いている        → 同一オリジンの /api/...
+   2. config.js に KABU_API_BASE が設定されている → そのURLの /api/... (任意銘柄をその場で取得)
+   3. どちらでもない / API に届かない            → data/<code>.json (保存済みデータ)      */
+const IS_LOCAL = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+const API_BASE = (IS_LOCAL ? "" : (window.KABU_API_BASE || "")).replace(/\/+$/, "");
+const USE_API = IS_LOCAL || API_BASE !== "";
+
+async function apiGet(path) {
+  const res = await fetch(API_BASE + path);
+  // API が無いホスティングでは 404 の HTML が返るため、JSON 以外は失敗扱いにする
+  if (!(res.headers.get("content-type") || "").includes("application/json")) {
+    throw new Error("API に接続できませんでした");
+  }
+  return res.json();
+}
+
+const API_HINT = "任意の銘柄をその場で取得するには API のデプロイが必要です (README を参照)。";
+
+function savedAtLabel(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// 保存済み JSON (GitHub Actions が定期更新) から表示する
+async function loadSavedMargin(code, apiFailed) {
+  try {
+    const res = await fetch(`./data/${encodeURIComponent(code)}.json`, { cache: "no-cache" });
+    if (!res.ok) throw new Error("not found");
+    const data = await res.json();
+    if (!Array.isArray(data.rows) || !data.rows.length) throw new Error("empty");
+    if (!data.source) data.source = `https://finance.yahoo.co.jp/quote/${code}.T/margin`;
+    const at = savedAtLabel(data.savedAt);
+    setStatus(`保存済みデータを表示しています${at ? ` (最終更新 ${at})` : ""}`);
+    showResult(data);
+  } catch (e) {
+    setStatus(
+      (apiFailed ? "API に接続できず、" : "") +
+        `「${code}」の保存済みデータがありません。${USE_API ? "" : API_HINT}`,
+      true
+    );
+  }
+}
+
+async function loadMargin(code) {
+  $("candidates").style.display = "none";
+  $("result").style.display = "none";
+  setStatus(`「${code}」の信用残データを取得中…`, false, true);
+
+  if (USE_API) {
+    try {
+      const data = await apiGet("/api/margin?code=" + encodeURIComponent(code));
+      if (data.error) { setStatus(data.error, true); return; }
+      setStatus("");
+      showResult(data);
+      return;
+    } catch (e) {
+      // API に届かない場合は保存済みデータで表示を試みる
+      return loadSavedMargin(code, true);
+    }
+  }
+  await loadSavedMargin(code, false);
+}
+
+function showCandidates(title, results) {
+  $("candidatesTitle").textContent = title;
+  $("candidateList").innerHTML = results.map((r) => `
+    <li data-code="${r.code}">
+      <span class="ccode">${r.code}</span>
+      <span class="cname">${r.name}</span>
+      <span class="cmarket">${r.market || ""}</span>
+    </li>`).join("");
+  $("candidates").style.display = "block";
+}
+
+// 保存済み銘柄の一覧 (data/index.json)。API が無いときの検索対象にもなる。
+let savedIndexPromise = null;
+function loadSavedIndex() {
+  if (!savedIndexPromise) {
+    savedIndexPromise = fetch("./data/index.json", { cache: "no-cache" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((j) => (Array.isArray(j) ? j : j.stocks || []))
+      .catch(() => []);
+  }
+  return savedIndexPromise;
+}
+
+async function searchSaved(q, apiFailed) {
+  const list = await loadSavedIndex();
+  const needle = q.toLowerCase();
+  const hits = list.filter(
+    (s) => s.code.toLowerCase().includes(needle) || (s.name || "").toLowerCase().includes(needle)
+  );
+  if (!hits.length) {
+    setStatus(
+      (apiFailed ? "API に接続できず、" : "") +
+        `保存済みの銘柄に「${q}」は見つかりませんでした。${USE_API ? "" : API_HINT}`,
+      true
+    );
+    return;
+  }
+  if (hits.length === 1) return loadMargin(hits[0].code);
+  setStatus("");
+  showCandidates("保存済みの銘柄から — 銘柄を選択してください", hits);
+}
+
+async function searchByName(q) {
+  $("candidates").style.display = "none";
+  $("result").style.display = "none";
+  setStatus(`「${q}」を検索中…`, false, true);
+
+  if (USE_API) {
+    try {
+      const data = await apiGet("/api/search?q=" + encodeURIComponent(q));
+      if (data.error) { setStatus(data.error, true); return; }
+      if (!data.results.length) {
+        setStatus(`「${q}」に一致する銘柄が見つかりませんでした`, true);
+        return;
+      }
+      if (data.results.length === 1) return loadMargin(data.results[0].code);
+      setStatus("");
+      showCandidates("検索結果 — 銘柄を選択してください", data.results);
+      return;
+    } catch (e) {
+      return searchSaved(q, true);
+    }
+  }
+  await searchSaved(q, false);
+}
+
+$("searchForm").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const q = $("searchInput").value.trim();
+  if (!q) return;
+  // 4〜5桁の英数字なら銘柄コードとみなして直接取得、それ以外は名前検索
+  if (/^[0-9][0-9A-Za-z]{3,4}$/.test(q)) {
+    loadMargin(q.toUpperCase());
+  } else {
+    searchByName(q);
+  }
+});
+
+$("candidateList").addEventListener("click", (ev) => {
+  const li = ev.target.closest("li[data-code]");
+  if (li) loadMargin(li.dataset.code);
+});
+
+// URL パラメータ ?code=7203 で直接表示 (ブックマーク用)
+const initCode = new URLSearchParams(location.search).get("code");
+if (initCode && /^[0-9][0-9A-Za-z]{3,4}$/.test(initCode.trim())) {
+  const c = initCode.trim().toUpperCase();
+  $("searchInput").value = c;
+  loadMargin(c);
+} else if (!USE_API) {
+  // API が無い環境では、保存済みの銘柄を最初から一覧表示しておく
+  loadSavedIndex().then((list) => {
+    if (list.length) showCandidates("保存済みの銘柄", list);
+  });
+}
+</script>
+</body>
+</html>
