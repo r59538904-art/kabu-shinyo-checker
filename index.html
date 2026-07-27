@@ -3,274 +3,414 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>株信用チェッカー｜信用残・信用倍率検索</title>
+<title>信用残ウォッチ｜信用残・信用倍率をひと目で</title>
+<meta name="description" content="銘柄の信用買い残・売り残・信用倍率・前週比を、推移グラフと週次履歴でまとめて確認できます。">
+<script>
+  // テーマは描画前に確定させる (切り替え時のちらつき防止)。既定はダーク。
+  // ?theme=light|dark|auto を付ければその場で指定できる。
+  (function () {
+    var ok = { light: 1, dark: 1, auto: 1 };
+    var t = new URLSearchParams(location.search).get("theme");
+    if (!ok[t]) { try { t = localStorage.getItem("kabu-theme"); } catch (e) {} }
+    document.documentElement.setAttribute("data-theme", ok[t] ? t : "dark");
+  })();
+</script>
 <style>
+  /* ---- 配色 ----
+     系列色は data-viz の検証済みカテゴリカル配色のスロット1〜3 (青/橙/アクア)。
+     増減の赤緑は国内慣習に合わせて「増加=赤・減少=緑」。色だけに頼らないよう
+     ▲▼ の記号を必ず添える。 */
   :root {
-    --bg: #f4f6f9;
-    --card: #ffffff;
-    --text: #1a2233;
-    --muted: #67748c;
-    --line: #e3e8f0;
-    --accent: #2563eb;
-    --accent-soft: #eaf1fe;
-    --up: #d92c2c;      /* 増加 = 赤 (国内慣習) */
-    --up-soft: #fdeeee;
-    --down: #0f8a4b;    /* 減少 = 緑 */
-    --down-soft: #eaf6f0;
-    --shadow: 0 1px 3px rgba(15, 30, 60, .08), 0 8px 24px rgba(15, 30, 60, .06);
-    --series-buy: #2a78d6;   /* グラフ: 買い残 */
-    --series-sell: #eb6834;  /* グラフ: 売り残 */
-    --series-price: #4a3aa7; /* グラフ: 株価 */
-    --grid: #e7ebf2;
+    color-scheme: light;
+    --plane:      #f9f9f7;   /* ページ地 */
+    --surface:    #fcfcfb;   /* カード面 */
+    --surface-2:  #f2f1ed;   /* 一段沈めた面 */
+    --text:       #0b0b0b;
+    --text-2:     #52514e;
+    --muted:      #898781;
+    --grid:       #e1e0d9;
+    --axis:       #c3c2b7;
+    --line:       rgba(11, 11, 11, .10);
+    --line-solid: #e4e3dd;
+    --accent:     #2a78d6;
+    --accent-ink: #ffffff;
+    --accent-soft:#e8f0fc;
+    --up:         #d03b3b;   /* 増加 = 赤 (国内慣習) */
+    --up-soft:    #fbeaea;
+    --down:       #006300;   /* 減少 = 緑 */
+    --down-soft:  #e6f2e6;
+    --series-buy:   #2a78d6;
+    --series-sell:  #eb6834;
+    --series-price: #1baf7a;
+    --shadow: 0 1px 2px rgba(11,11,11,.04), 0 6px 20px rgba(11,11,11,.05);
+    --card: var(--surface);   /* グラフ描画が参照 */
   }
+  /* OS がダークで、明示的にライトを選んでいないとき */
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #10151f;
-      --card: #1a2130;
-      --text: #e8ecf4;
-      --muted: #93a0b8;
-      --line: #2a3348;
-      --accent: #5b93f5;
-      --accent-soft: #1d2a44;
-      --up: #ff6b6b;
-      --up-soft: #3a2226;
-      --down: #3ecf8e;
-      --down-soft: #16342a;
-      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
-      --series-buy: #3987e5;
-      --series-sell: #d95926;
-      --series-price: #9085e9;
-      --grid: #252e42;
+    :root:where([data-theme="auto"]) {
+      color-scheme: dark;
+      --plane:      #0d0d0d;
+      --surface:    #1a1a19;
+      --surface-2:  #121211;
+      --text:       #ffffff;
+      --text-2:     #c3c2b7;
+      --muted:      #898781;
+      --grid:       #2c2c2a;
+      --axis:       #383835;
+      --line:       rgba(255, 255, 255, .10);
+      --line-solid: #2c2c2a;
+      --accent:     #3987e5;
+      --accent-ink: #06111f;
+      --accent-soft:#16283f;
+      --up:         #e66767;
+      --up-soft:    #33201f;
+      --down:       #0ca30c;
+      --down-soft:  #14290f;
+      --series-buy:   #3987e5;
+      --series-sell:  #d95926;
+      --series-price: #199e70;
+      --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.35);
     }
   }
+  /* 明示的にダークを選んだとき (OS 設定より優先) */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:      #0d0d0d;
+    --surface:    #1a1a19;
+    --surface-2:  #121211;
+    --text:       #ffffff;
+    --text-2:     #c3c2b7;
+    --muted:      #898781;
+    --grid:       #2c2c2a;
+    --axis:       #383835;
+    --line:       rgba(255, 255, 255, .10);
+    --line-solid: #2c2c2a;
+    --accent:     #3987e5;
+    --accent-ink: #06111f;
+    --accent-soft:#16283f;
+    --up:         #e66767;
+    --up-soft:    #33201f;
+    --down:       #0ca30c;
+    --down-soft:  #14290f;
+    --series-buy:   #3987e5;
+    --series-sell:  #d95926;
+    --series-price: #199e70;
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.35);
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
-    background: var(--bg);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN",
+                 "Yu Gothic UI", "Meiryo", sans-serif;
+    background: var(--plane);
     color: var(--text);
     line-height: 1.6;
     min-height: 100vh;
+    font-feature-settings: "palt" 1;
   }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+  a { color: var(--accent); }
 
-  header.site { text-align: center; padding: 24px 0 20px; }
-  header.site h1 { font-size: 26px; letter-spacing: .04em; }
-  header.site h1 .icon { margin-right: 8px; }
-  header.site p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  /* ---- 上部バー ---- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    background: color-mix(in srgb, var(--plane) 88%, transparent);
+    backdrop-filter: saturate(160%) blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+  .brand .mark { flex: none; align-self: center; display: block; }
+  .brand .bname {
+    font-size: 16px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+  }
+  .brand .bsub {
+    font-size: 11px; color: var(--muted); letter-spacing: .08em;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  @media (max-width: 560px) { .brand .bsub { display: none; } }
 
-  /* 検索欄 */
+  .themetoggle {
+    margin-left: auto; display: flex; gap: 2px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px;
+  }
+  .themetoggle button {
+    appearance: none; border: none; background: transparent;
+    color: var(--muted); font: inherit; font-size: 12px; font-weight: 600;
+    padding: 4px 11px; border-radius: 999px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px; line-height: 1.5;
+  }
+  .themetoggle button:hover { color: var(--text); }
+  .themetoggle button[aria-pressed="true"] {
+    background: var(--surface); color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,.12);
+  }
+  .themetoggle svg { display: block; }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 22px 16px 72px; }
+
+  /* ---- 導入 ---- */
+  .lede { text-align: center; margin-bottom: 18px; }
+  .lede h1 { font-size: 21px; font-weight: 700; letter-spacing: .01em; }
+  .lede p { color: var(--muted); font-size: 13px; margin-top: 3px; }
+
+  /* ---- 検索 ---- */
   .searchbox {
     display: flex; gap: 8px;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line-solid);
+    border-radius: 12px; padding: 8px;
     box-shadow: var(--shadow);
   }
+  .searchbox:focus-within { border-color: var(--accent); }
   .searchbox input {
-    flex: 1;
-    border: none; outline: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 17px;
-    padding: 8px 10px;
+    flex: 1; min-width: 0;
+    border: none; outline: none; background: transparent;
+    color: var(--text); font: inherit; font-size: 16px; padding: 8px 10px;
   }
+  .searchbox input::placeholder { color: var(--muted); }
   .searchbox button {
-    border: none;
-    background: var(--accent);
-    color: #fff;
-    font-size: 15px;
-    font-weight: 600;
-    padding: 10px 22px;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: opacity .15s;
+    border: none; background: var(--accent); color: var(--accent-ink);
+    font: inherit; font-size: 14px; font-weight: 700;
+    padding: 9px 20px; border-radius: 9px; cursor: pointer;
   }
-  .searchbox button:hover { opacity: .85; }
+  .searchbox button:hover { filter: brightness(1.08); }
   .hint { color: var(--muted); font-size: 12px; margin: 8px 4px 0; }
 
-  /* 状態表示 */
-  .status { margin: 28px 0; text-align: center; color: var(--muted); font-size: 15px; }
+  /* ---- 状態表示 ---- */
+  .status { margin: 22px 0; text-align: center; color: var(--text-2); font-size: 14px; }
+  .status:empty { margin: 0; }
   .status.error { color: var(--up); }
   .spinner {
-    display: inline-block; width: 18px; height: 18px;
-    border: 3px solid var(--line); border-top-color: var(--accent);
-    border-radius: 50%; animation: spin .8s linear infinite;
-    vertical-align: -4px; margin-right: 8px;
+    display: inline-block; width: 15px; height: 15px;
+    border: 2px solid var(--line-solid); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .7s linear infinite;
+    vertical-align: -3px; margin-right: 7px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* 検索候補 */
-  .candidates { margin-top: 20px; display: none; }
-  .candidates h2 { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
-  .candidates ul { list-style: none; }
+  /* ---- 銘柄候補 ---- */
+  .candidates { margin-top: 18px; display: none; }
+  .candidates h2 {
+    font-size: 11px; color: var(--muted); margin-bottom: 8px;
+    letter-spacing: .08em; font-weight: 700;
+  }
+  .candidates ul { list-style: none; display: grid; gap: 6px; }
   .candidates li {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 12px 16px;
-    margin-bottom: 8px;
-    cursor: pointer;
+    background: var(--surface);
+    border: 1px solid var(--line-solid);
+    border-radius: 10px; padding: 11px 14px; cursor: pointer;
     display: flex; align-items: center; gap: 12px;
-    transition: border-color .15s, transform .1s;
   }
-  .candidates li:hover { border-color: var(--accent); transform: translateY(-1px); }
-  .candidates .ccode {
-    font-weight: 700; color: var(--accent);
-    background: var(--accent-soft);
-    border-radius: 6px; padding: 2px 10px; font-size: 14px;
+  .candidates li:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .ccode {
+    font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px;
+    color: var(--accent); background: var(--accent-soft);
+    border-radius: 6px; padding: 2px 9px; flex: none;
   }
-  .candidates .cname { flex: 1; font-weight: 600; }
-  .candidates .cmarket { color: var(--muted); font-size: 12px; }
+  .cname { flex: 1; font-weight: 600; font-size: 14px; min-width: 0; }
+  .cmarket { color: var(--muted); font-size: 12px; flex: none; }
 
-  /* 結果 */
-  #result { display: none; margin-top: 28px; }
-  .stock-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-  .stock-head .scode {
-    font-size: 15px; font-weight: 700; color: var(--accent);
-    background: var(--accent-soft); border-radius: 8px; padding: 2px 12px;
+  /* ---- 銘柄ヘッダー ---- */
+  #result { display: none; margin-top: 22px; }
+  .stockhead {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+    padding-bottom: 14px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
   }
-  .stock-head .sname { font-size: 22px; font-weight: 700; }
-  .stock-head .sdate { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .stockhead .scode {
+    font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 700;
+    letter-spacing: .06em;
+    color: var(--accent); background: var(--accent-soft);
+    border-radius: 6px; padding: 3px 10px;
+  }
+  .stockhead .sname { font-size: 22px; font-weight: 700; letter-spacing: .01em; }
+  .stockhead .sdate {
+    margin-left: auto; color: var(--muted); font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
 
-  /* 決算発表予定日 */
+  /* ---- 決算予定 ---- */
   .earnings {
-    display: none;
-    align-items: center; gap: 10px; flex-wrap: wrap;
-    background: var(--accent-soft);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 10px 16px;
-    margin-bottom: 14px;
+    display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line-solid);
+    border-radius: 12px; padding: 10px 15px; margin-bottom: 14px;
   }
-  .earnings-ico { font-size: 16px; }
-  .earnings-label { font-size: 13px; font-weight: 600; color: var(--muted); }
-  .earnings-date { font-size: 17px; font-weight: 700; color: var(--text); }
+  .earnings-label {
+    font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .06em;
+  }
+  .earnings-date {
+    font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
   .earnings-countdown {
-    font-size: 12px; font-weight: 700;
-    color: var(--accent); background: var(--card);
-    border-radius: 8px; padding: 3px 10px;
+    font-size: 12px; font-weight: 700; color: var(--text-2);
+    background: var(--surface-2); border-radius: 6px; padding: 2px 9px;
   }
   .earnings-countdown.soon { color: var(--up); background: var(--up-soft); }
 
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 14px;
+  /* ---- 数値タイル ---- */
+  .tiles {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px; margin-bottom: 12px;
   }
-  .cards-price { margin-bottom: 14px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--line-solid);
+    border-radius: 12px; padding: 15px 17px; box-shadow: var(--shadow);
+  }
+  .tile .label {
+    font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .06em;
+  }
+  .tile .value {
+    font-size: 30px; font-weight: 700; margin-top: 6px;
+    letter-spacing: -.015em; line-height: 1.15;
+  }
+  .tile .value .unit {
+    font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 3px;
+    letter-spacing: 0;
+  }
+  .tile .sub {
+    margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  }
+  .sublabel { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+    border-radius: 6px; padding: 2px 8px;
+  }
+  .chip.up   { color: var(--up);    background: var(--up-soft); }
+  .chip.down { color: var(--down);  background: var(--down-soft); }
+  .chip.flat { color: var(--text-2); background: var(--surface-2); }
 
-  /* 株価レンジ (年初来高値/安値) */
-  .card-range .range-vals {
-    display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 10px;
+  /* ---- 株価レンジ ---- */
+  .rangecard {
+    background: var(--surface); border: 1px solid var(--line-solid);
+    border-radius: 12px; padding: 15px 17px; box-shadow: var(--shadow);
+    margin-bottom: 12px;
   }
-  .range-item { display: flex; align-items: baseline; gap: 8px; }
-  .range-tag {
-    font-size: 12px; font-weight: 700; border-radius: 6px; padding: 2px 8px;
+  .rangecard > .label {
+    font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .06em;
   }
-  .range-tag.high { color: var(--up); background: var(--up-soft); }
+  .range-block { margin-top: 13px; }
+  .range-block + .range-block {
+    margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line);
+  }
+  .range-sub { font-size: 11.5px; font-weight: 700; color: var(--text-2); margin-bottom: 8px; }
+  .range-vals { display: flex; flex-wrap: wrap; gap: 8px 26px; }
+  .range-item { display: flex; align-items: baseline; gap: 7px; }
+  .range-tag { font-size: 11px; font-weight: 700; border-radius: 5px; padding: 2px 7px; }
+  .range-tag.high { color: var(--up);   background: var(--up-soft); }
   .range-tag.low  { color: var(--down); background: var(--down-soft); }
-  .range-price { font-size: 21px; font-weight: 700; letter-spacing: .01em; }
-  .range-price::after { content: "円"; font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 2px; }
-  .range-date { font-size: 12px; color: var(--muted); }
+  .range-price { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+  .range-price::after {
+    content: "円"; font-size: 11px; font-weight: 600; color: var(--muted); margin-left: 2px;
+  }
+  .range-date { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .range-bar {
-    position: relative; height: 8px; border-radius: 5px;
-    margin: 16px 4px 0;
-    background: linear-gradient(90deg, var(--down) 0%, var(--line) 50%, var(--up) 100%);
-    opacity: .35;
+    position: relative; height: 6px; border-radius: 4px; margin: 15px 3px 0;
+    background: linear-gradient(90deg, var(--down) 0%, var(--axis) 50%, var(--up) 100%);
+    opacity: .45;
   }
   .range-bar-marker {
-    position: absolute; top: -4px; width: 3px; height: 16px;
+    position: absolute; top: -5px; width: 3px; height: 16px;
     border-radius: 2px; background: var(--text);
+    box-shadow: 0 0 0 2px var(--surface);
     transform: translateX(-50%);
   }
-  .range-now { font-size: 12px; color: var(--muted); margin: 8px 4px 0; text-align: center; }
-  .range-now b { color: var(--text); font-weight: 700; }
-  .range-sub { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
-  .range-block + .range-block {
-    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
-  }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 18px 20px;
-    box-shadow: var(--shadow);
-  }
-  .card .label { font-size: 13px; color: var(--muted); font-weight: 600; }
-  .card .value { font-size: 28px; font-weight: 700; margin-top: 4px; letter-spacing: .01em; }
-  .card .value .unit { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 3px; }
-  .card .sub { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .chip {
-    display: inline-block;
-    font-size: 13px; font-weight: 700;
-    border-radius: 8px; padding: 3px 10px;
-  }
-  .chip.up   { color: var(--up);   background: var(--up-soft); }
-  .chip.down { color: var(--down); background: var(--down-soft); }
-  .chip.flat { color: var(--muted); background: var(--bg); }
-  .sub .sublabel { font-size: 12px; color: var(--muted); }
+  .range-now { font-size: 11.5px; color: var(--muted); margin: 9px 3px 0; text-align: center; }
+  .range-now b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
 
-  /* 推移グラフ */
-  .chart-section { margin-top: 26px; }
-  .chart-section h2 { font-size: 16px; margin-bottom: 6px; }
-  .chart-note { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  /* ---- グラフ ---- */
+  .chart-section { margin-top: 22px; }
+  .sec-title {
+    font-size: 14px; font-weight: 700; margin-bottom: 5px; letter-spacing: .01em;
+  }
+  .chart-note { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.55; }
   .chart-card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    box-shadow: var(--shadow);
-    padding: 16px 18px 10px;
-    position: relative;
+    background: var(--surface); border: 1px solid var(--line-solid);
+    border-radius: 12px; box-shadow: var(--shadow);
+    padding: 14px 16px 8px; position: relative;
   }
   #chartHost svg { display: block; width: 100%; height: auto; }
   #chartTip {
     position: absolute; display: none; pointer-events: none;
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 10px; box-shadow: var(--shadow);
-    padding: 8px 12px; font-size: 12px; line-height: 1.7; z-index: 5;
-    min-width: 150px;
+    background: var(--surface); border: 1px solid var(--line-solid);
+    border-radius: 9px; box-shadow: var(--shadow);
+    padding: 8px 11px; font-size: 12px; line-height: 1.65; z-index: 5; min-width: 158px;
+    font-variant-numeric: tabular-nums;
   }
-  #chartTip .tdate { font-weight: 700; color: var(--text); }
+  #chartTip .tdate { font-weight: 700; color: var(--text); margin-bottom: 2px; }
   #chartTip .trow { display: flex; justify-content: space-between; gap: 14px; color: var(--muted); }
   #chartTip .trow b { color: var(--text); font-weight: 600; }
-  #chartTip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  #chartTip .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px;
+  }
 
-  /* 履歴テーブル */
-  .history { margin-top: 26px; }
-  .history h2 { font-size: 16px; margin-bottom: 10px; }
+  /* ---- 履歴テーブル ---- */
+  .history { margin-top: 22px; }
   .tablewrap {
-    overflow-x: auto;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    box-shadow: var(--shadow);
+    overflow-x: auto; background: var(--surface);
+    border: 1px solid var(--line-solid); border-radius: 12px; box-shadow: var(--shadow);
   }
-  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
-  th, td { padding: 10px 14px; text-align: right; white-space: nowrap; }
+  table {
+    border-collapse: collapse; width: 100%; min-width: 660px;
+    font-size: 13.5px; font-variant-numeric: tabular-nums;
+  }
+  th, td { padding: 9px 14px; text-align: right; white-space: nowrap; }
   thead th {
-    background: transparent;
-    color: var(--muted); font-size: 12px; font-weight: 600;
-    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--surface);
+    color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    border-bottom: 1px solid var(--line-solid);
   }
-  tbody th { text-align: left; font-weight: 600; }
-  tbody tr { border-bottom: 1px solid var(--line); }
-  tbody tr:last-child { border-bottom: none; }
+  tbody th { text-align: left; font-weight: 600; color: var(--text-2); }
+  tbody tr + tr { border-top: 1px solid var(--line); }
+  tbody tr:hover { background: var(--surface-2); }
   td.up { color: var(--up); }
   td.down { color: var(--down); }
-  td .pct { font-size: 12px; opacity: .85; margin-left: 4px; }
+  td .pct { font-size: 11.5px; opacity: .85; margin-left: 3px; }
 
-  footer.note { margin-top: 22px; color: var(--muted); font-size: 12px; }
-  footer.note a { color: var(--accent); }
+  footer.note { margin-top: 20px; color: var(--muted); font-size: 11.5px; line-height: 1.7; }
 </style>
 </head>
 <body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="mark" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <rect x="1"  y="9"  width="3.4" height="8"  rx="1.2" fill="var(--series-buy)"/>
+      <rect x="7.3" y="4" width="3.4" height="13" rx="1.2" fill="var(--series-sell)"/>
+      <rect x="13.6" y="1" width="3.4" height="16" rx="1.2" fill="var(--series-price)"/>
+    </svg>
+    <span class="bname">信用残ウォッチ</span>
+    <span class="bsub">Margin Balance Watch</span>
+  </div>
+  <div class="themetoggle" id="themeToggle" role="group" aria-label="表示テーマ">
+    <button type="button" data-set-theme="auto" title="OS の設定に合わせる">自動</button>
+    <button type="button" data-set-theme="light" title="ライトテーマ">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <circle cx="8" cy="8" r="3.1"/>
+        <path d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1M12.9 3.1l-1.1 1.1M4.2 11.8l-1.1 1.1M12.9 12.9l-1.1-1.1M4.2 4.2L3.1 3.1"/>
+      </svg>ライト
+    </button>
+    <button type="button" data-set-theme="dark" title="ダークテーマ">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+        <path d="M13.5 9.6A5.9 5.9 0 0 1 6.4 2.5a5.9 5.9 0 1 0 7.1 7.1Z"/>
+      </svg>ダーク
+    </button>
+  </div>
+</header>
+
 <div class="wrap">
 
-  <header class="site">
-    <h1><span class="icon">📊</span>株信用チェッカー</h1>
-    <p>信用買い残・売り残・信用倍率・前週比をまとめて確認</p>
-  </header>
+  <div class="lede">
+    <h1>信用買い残・売り残・信用倍率をひと目で</h1>
+    <p>銘柄コードか銘柄名を入れると、前週比・推移グラフ・週次履歴まで表示します</p>
+  </div>
 
   <form class="searchbox" id="searchForm">
     <input id="searchInput" type="text" placeholder="銘柄コード または 銘柄名 (例: 7203 / トヨタ)"
@@ -287,61 +427,25 @@
   </section>
 
   <section id="result">
-    <div class="stock-head">
+    <div class="stockhead">
       <span class="scode" id="rCode"></span>
       <span class="sname" id="rName"></span>
       <span class="sdate" id="rDate"></span>
     </div>
 
     <div class="earnings" id="earnings">
-      <span class="earnings-ico">📅</span>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--muted)"
+           stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+        <rect x="1.9" y="3" width="12.2" height="11.2" rx="2"/>
+        <path d="M1.9 6.6h12.2M5.2 1.6v2.6M10.8 1.6v2.6"/>
+      </svg>
       <span class="earnings-label">決算発表予定日</span>
       <span class="earnings-date" id="earningsDate"></span>
       <span class="earnings-countdown" id="earningsCountdown"></span>
     </div>
 
-    <div class="cards cards-price">
-      <div class="card card-range">
-        <div class="label">株価レンジ</div>
-
-        <div class="range-block" id="atBlock">
-          <div class="range-sub">上場来 (上場時からの高値・安値)</div>
-          <div class="range-vals">
-            <div class="range-item">
-              <span class="range-tag high">上場来高値</span>
-              <span class="range-price" id="atHighVal"></span>
-              <span class="range-date" id="atHighDate"></span>
-            </div>
-            <div class="range-item">
-              <span class="range-tag low">上場来安値</span>
-              <span class="range-price" id="atLowVal"></span>
-              <span class="range-date" id="atLowDate"></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="range-block" id="yrBlock">
-          <div class="range-sub">年初来</div>
-          <div class="range-vals">
-            <div class="range-item">
-              <span class="range-tag high">年初来高値</span>
-              <span class="range-price" id="yearHighVal"></span>
-              <span class="range-date" id="yearHighDate"></span>
-            </div>
-            <div class="range-item">
-              <span class="range-tag low">年初来安値</span>
-              <span class="range-price" id="yearLowVal"></span>
-              <span class="range-date" id="yearLowDate"></span>
-            </div>
-          </div>
-          <div class="range-bar" id="rangeBar"><div class="range-bar-marker" id="rangeBarMarker"></div></div>
-          <div class="range-now" id="rangeNow"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="cards">
-      <div class="card">
+    <div class="tiles">
+      <div class="tile">
         <div class="label">信用買い残</div>
         <div class="value"><span id="buyVal"></span><span class="unit">株</span></div>
         <div class="sub">
@@ -350,7 +454,7 @@
           <span class="chip" id="buyPct"></span>
         </div>
       </div>
-      <div class="card">
+      <div class="tile">
         <div class="label">信用売り残</div>
         <div class="value"><span id="sellVal"></span><span class="unit">株</span></div>
         <div class="sub">
@@ -359,7 +463,7 @@
           <span class="chip" id="sellPct"></span>
         </div>
       </div>
-      <div class="card">
+      <div class="tile">
         <div class="label">信用倍率 (買い残 ÷ 売り残)</div>
         <div class="value"><span id="ratioVal"></span><span class="unit">倍</span></div>
         <div class="sub">
@@ -369,8 +473,46 @@
       </div>
     </div>
 
+    <div class="rangecard" id="rangeCard">
+      <div class="label">株価レンジ</div>
+
+      <div class="range-block" id="atBlock">
+        <div class="range-sub">上場来 (上場時からの高値・安値)</div>
+        <div class="range-vals">
+          <div class="range-item">
+            <span class="range-tag high">上場来高値</span>
+            <span class="range-price" id="atHighVal"></span>
+            <span class="range-date" id="atHighDate"></span>
+          </div>
+          <div class="range-item">
+            <span class="range-tag low">上場来安値</span>
+            <span class="range-price" id="atLowVal"></span>
+            <span class="range-date" id="atLowDate"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="range-block" id="yrBlock">
+        <div class="range-sub">年初来</div>
+        <div class="range-vals">
+          <div class="range-item">
+            <span class="range-tag high">年初来高値</span>
+            <span class="range-price" id="yearHighVal"></span>
+            <span class="range-date" id="yearHighDate"></span>
+          </div>
+          <div class="range-item">
+            <span class="range-tag low">年初来安値</span>
+            <span class="range-price" id="yearLowVal"></span>
+            <span class="range-date" id="yearLowDate"></span>
+          </div>
+        </div>
+        <div class="range-bar" id="rangeBar"><div class="range-bar-marker" id="rangeBarMarker"></div></div>
+        <div class="range-now" id="rangeNow"></div>
+      </div>
+    </div>
+
     <div class="chart-section">
-      <h2>信用残・株価の推移グラフ</h2>
+      <h2 class="sec-title">信用残・株価の推移</h2>
       <p class="chart-note">買い残・売り残・株価を上下に分けて表示しています(桁が違うため縦軸はそれぞれ独立)。株価は各週の申込日の終値です。グラフにマウスを合わせると各週の数値が出ます。</p>
       <div class="chart-card">
         <div id="chartHost"></div>
@@ -379,7 +521,7 @@
     </div>
 
     <div class="history">
-      <h2>信用残の推移 (週次・直近26週)</h2>
+      <h2 class="sec-title">信用残の推移 (週次・直近26週)</h2>
       <div class="tablewrap">
         <table>
           <thead>
@@ -399,7 +541,8 @@
     </div>
 
     <footer class="note">
-      データ出典: <a id="srcLink" href="#" target="_blank" rel="noopener">Yahoo!ファイナンス 信用残時系列</a>。
+      データ出典: <a id="srcLink" href="#" target="_blank" rel="noopener">Yahoo!ファイナンス 信用残時系列</a>、
+      株価レンジ・決算予定日は SBI証券。<br>
       表示は取得時点の情報であり、投資判断は自己責任でお願いします。
     </footer>
   </section>
@@ -411,30 +554,58 @@
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n == null ? "―" : n.toLocaleString("ja-JP");
 
+/* ---- テーマ切り替え (自動 / ライト / ダーク) ---- */
+const THEME_KEY = "kabu-theme";
+
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") || "dark";
+}
+
+function applyTheme(mode) {
+  document.documentElement.setAttribute("data-theme", mode);
+  try { localStorage.setItem(THEME_KEY, mode); } catch (e) {}
+  for (const b of $("themeToggle").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String(b.dataset.setTheme === mode));
+  }
+  // グラフは CSS 変数の色を読んで描くため、切り替え時に描き直す
+  if (chartRows) renderChart(chartRows);
+}
+
+$("themeToggle").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-set-theme]");
+  if (b) applyTheme(b.dataset.setTheme);
+});
+
 function setStatus(msg, isError = false, loading = false) {
   const el = $("status");
   el.className = "status" + (isError ? " error" : "");
   el.innerHTML = loading ? '<span class="spinner"></span>' + msg : msg;
 }
 
-function chip(el, num, unit, alwaysSign) {
+// 増減チップ。色だけに頼らないよう ▲▼ を必ず添える。
+// digits を渡すと小数桁を固定する (% の桁を揃えるため)
+function chip(el, num, unit, digits) {
   if (num == null) {
     el.textContent = "―";
     el.className = "chip flat";
     return;
   }
-  const sign = num > 0 ? "+" : "";
-  el.textContent = sign + num.toLocaleString("ja-JP", { maximumFractionDigits: 2 }) + unit;
+  const opt = digits == null
+    ? { maximumFractionDigits: 2 }
+    : { minimumFractionDigits: digits, maximumFractionDigits: digits };
+  const arrow = num > 0 ? "▲" : num < 0 ? "▼" : "―";
+  const body = Math.abs(num).toLocaleString("ja-JP", opt) + unit;
+  el.textContent = num === 0 ? "±0" + unit : arrow + " " + body;
   el.className = "chip " + (num > 0 ? "up" : num < 0 ? "down" : "flat");
 }
 
 function changeCell(chg, pct) {
-  if (chg == null) return '<td>―</td>';
+  if (chg == null) return "<td>―</td>";
   const cls = chg > 0 ? "up" : chg < 0 ? "down" : "";
-  const sign = chg > 0 ? "+" : "";
+  const arrow = chg > 0 ? "▲" : chg < 0 ? "▼" : "";
   const pctStr = pct == null ? "" :
-    `<span class="pct">(${pct > 0 ? "+" : ""}${pct.toFixed(1)}%)</span>`;
-  return `<td class="${cls}">${sign}${fmt(chg)}${pctStr}</td>`;
+    `<span class="pct">(${Math.abs(pct).toFixed(1)}%)</span>`;
+  return `<td class="${cls}">${arrow}${fmt(Math.abs(chg))}${pctStr}</td>`;
 }
 
 function showResult(data) {
@@ -450,11 +621,11 @@ function showResult(data) {
 
   $("buyVal").textContent = fmt(latest.buy);
   chip($("buyChg"), latest.buyChange, " 株");
-  chip($("buyPct"), latest.buyPct == null ? null : Math.round(latest.buyPct * 100) / 100, " %");
+  chip($("buyPct"), latest.buyPct, " %", 2);
 
   $("sellVal").textContent = fmt(latest.sell);
   chip($("sellChg"), latest.sellChange, " 株");
-  chip($("sellPct"), latest.sellPct == null ? null : Math.round(latest.sellPct * 100) / 100, " %");
+  chip($("sellPct"), latest.sellPct, " %", 2);
 
   $("ratioVal").textContent = latest.ratio == null ? "―" : latest.ratio.toFixed(2);
   $("ratioPrev").textContent = prev && prev.ratio != null ? prev.ratio.toFixed(2) + " 倍" : "―";
@@ -486,7 +657,6 @@ function showEarnings(e) {
   $("earningsDate").textContent =
     `${e.date}（${wd[d.getDay()]}）` + (e.planned ? " 予定" : "");
 
-  // 残り日数 (今日との差)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const days = Math.round((d - today) / 86400000);
@@ -504,7 +674,6 @@ function showEarnings(e) {
 }
 
 /* ---- 株価レンジ (上場来 / 年初来の高値・安値) ---- */
-// 1つの高値安値ブロックを描画する共通関数
 function fillRangeBlock(ids, hi, lo, now, rangeLabel) {
   const block = $(ids.block);
   if (!hi || hi.value == null || !lo || lo.value == null) {
@@ -546,7 +715,6 @@ function fillValuesOnly(ids, hi, lo) {
 }
 
 function showRange(data) {
-  const card = document.querySelector(".cards-price");
   const now = data.price;
 
   const atShown = fillValuesOnly(
@@ -562,7 +730,7 @@ function showRange(data) {
     data.yearHigh, data.yearLow, now, "年初来"
   );
 
-  card.style.display = atShown || yrShown ? "" : "none";
+  $("rangeCard").style.display = atShown || yrShown ? "" : "none";
 }
 
 /* ---- 信用残推移グラフ (SVG 折れ線) ---- */
@@ -589,7 +757,8 @@ function niceTicks(min, max, count) {
 }
 
 // 買い残・売り残は桁が違う(例: 2000万 vs 100万)ため同じ縦軸だと売り残が潰れる。
-// そこで上下2段(スモールマルチプル)にして、それぞれ独立した縦軸で描く。
+// そこで上下3段(スモールマルチプル)にして、それぞれ独立した縦軸で描く。
+// 各パネルは1系列なので、色ではなくパネル見出しが系列を示す。
 function renderChart(rows) {
   chartRows = rows;
   const host = $("chartHost");
@@ -597,32 +766,32 @@ function renderChart(rows) {
   if (data.length < 2) { host.innerHTML = ""; return; }
 
   const css = getComputedStyle(document.documentElement);
-  const cBuy = css.getPropertyValue("--series-buy").trim();
-  const cSell = css.getPropertyValue("--series-sell").trim();
-  const cGrid = css.getPropertyValue("--grid").trim();
-  const cMuted = css.getPropertyValue("--muted").trim();
-  const cText = css.getPropertyValue("--text").trim();
-  const cCard = css.getPropertyValue("--card").trim();
+  const v = (name) => css.getPropertyValue(name).trim();
+  const cBuy = v("--series-buy");
+  const cSell = v("--series-sell");
+  const cPrice = v("--series-price");
+  const cGrid = v("--grid");
+  const cAxis = v("--axis");
+  const cMuted = v("--muted");
+  const cText = v("--text");
+  const cSurface = v("--surface");
 
-  // 表示するパネル(データがある系列のみ)。株価も1段追加する。
   const specs = [
     { key: "buy",   color: cBuy,   name: "信用買い残", unit: "株", zero: true },
     { key: "sell",  color: cSell,  name: "信用売り残", unit: "株", zero: true },
-    { key: "close", color: css.getPropertyValue("--series-price").trim(),
-      name: "株価 (終値)", unit: "円", zero: false },
+    { key: "close", color: cPrice, name: "株価 (終値)", unit: "円", zero: false },
   ].filter((s) => data.some((r) => r[s.key] != null));
 
   const W = Math.max(host.clientWidth || 780, 320);
-  const mL = 52, mR = 14;           // 左: 縦軸ラベル / 右: 余白
+  const mL = 54, mR = 14;
   const iw = W - mL - mR;
-  const titleH = 24, gap = 20, xAxisH = 26, mTop = 4;
-  const plotH = specs.length >= 3 ? 100 : 116;   // 3段のときは少し低く
+  const titleH = 26, gap = 22, xAxisH = 26, mTop = 4;
+  const plotH = specs.length >= 3 ? 102 : 118;
   const H = mTop + (titleH + plotH) * specs.length + gap * (specs.length - 1) + xAxisH;
 
   const n = data.length;
   const X = (i) => mL + (i * iw) / (n - 1);
 
-  // X軸ラベル(最大6個)
   const xStep = Math.max(1, Math.ceil(n / 6));
   const xLabels = [];
   for (let i = 0; i < n; i += xStep) xLabels.push(i);
@@ -630,12 +799,12 @@ function renderChart(rows) {
   const shortDate = (d) => d.replace(/^\d{4}\//, "");
 
   const lastIdx = (key) => { for (let i = n - 1; i >= 0; i--) if (data[i][key] != null) return i; return -1; };
-  const panels = {}; // key -> {plotTop, plotBottom, Y}
+  const panels = {};
 
   function drawPanel(spec, plotTop) {
     const { key, color, name, unit, zero } = spec;
     const plotBottom = plotTop + plotH;
-    const vals = data.map((r) => r[key]).filter((v) => v != null);
+    const vals = data.map((r) => r[key]).filter((x) => x != null);
     let lo, hi;
     if (zero) {                       // 残高: 0起点・上に余白
       lo = 0; hi = Math.max(...vals) * 1.14 || 1;
@@ -644,16 +813,17 @@ function renderChart(rows) {
       const pad = (mx - mn || mx || 1) * 0.12;
       lo = mn - pad; hi = mx + pad;
     }
-    const Y = (v) => plotBottom - ((v - lo) / (hi - lo)) * plotH;
+    const Y = (val) => plotBottom - ((val - lo) / (hi - lo)) * plotH;
     panels[key] = { plotTop, plotBottom, Y };
 
     let s = "";
     for (const t of niceTicks(lo, hi, zero ? 2 : 3).filter((t) => t >= lo && t <= hi)) {
       const y = Y(t).toFixed(1);
       s += `<line x1="${mL}" y1="${y}" x2="${W - mR}" y2="${y}" stroke="${cGrid}" stroke-width="1"/>`;
-      s += `<text x="${mL - 8}" y="${(Y(t) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="${cMuted}">${fmtAxis(t)}</text>`;
+      s += `<text x="${mL - 9}" y="${(Y(t) + 4).toFixed(1)}" text-anchor="end" font-size="10.5" fill="${cMuted}">${fmtAxis(t)}</text>`;
     }
-    // ライン & 面塗り
+    s += `<line x1="${mL}" y1="${plotBottom}" x2="${W - mR}" y2="${plotBottom}" stroke="${cAxis}" stroke-width="1"/>`;
+
     let line = "", pen = false, first = null, last = null;
     data.forEach((r, i) => {
       if (r[key] == null) { pen = false; return; }
@@ -664,19 +834,16 @@ function renderChart(rows) {
       pen = true;
     });
     if (first !== null) {
-      s += `<path d="${line}L${last.toFixed(1)},${plotBottom}L${first.toFixed(1)},${plotBottom}Z" fill="${color}" fill-opacity="0.12"/>`;
+      s += `<path d="${line}L${last.toFixed(1)},${plotBottom}L${first.toFixed(1)},${plotBottom}Z" fill="${color}" fill-opacity="0.10"/>`;
     }
-    s += `<path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
-    data.forEach((r, i) => {
-      if (r[key] == null) return;
-      s += `<circle cx="${X(i).toFixed(1)}" cy="${Y(r[key]).toFixed(1)}" r="2.4" fill="${color}"/>`;
-    });
-    // パネル見出し(系列名 + 最新値)
+    s += `<path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+    // パネル見出し(系列名 + 最新値) — 1系列なので凡例の代わりに直接ラベルする
     const li = lastIdx(key);
     const latest = li >= 0 ? fmt(data[li][key]) + " " + unit : "―";
-    s += `<circle cx="${mL + 5}" cy="${plotTop - 9}" r="5" fill="${color}"/>`;
-    s += `<text x="${mL + 15}" y="${plotTop - 5}" font-size="13" font-weight="700" fill="${cText}">${name}</text>`;
-    s += `<text x="${W - mR}" y="${plotTop - 5}" text-anchor="end" font-size="12" fill="${cMuted}">最新 <tspan font-weight="700" fill="${cText}">${latest}</tspan></text>`;
+    s += `<rect x="${mL}" y="${plotTop - 15}" width="9" height="9" rx="2.5" fill="${color}"/>`;
+    s += `<text x="${mL + 15}" y="${plotTop - 7}" font-size="12.5" font-weight="700" fill="${cText}">${name}</text>`;
+    s += `<text x="${W - mR}" y="${plotTop - 7}" text-anchor="end" font-size="11.5" fill="${cMuted}">最新 <tspan font-weight="700" fill="${cText}">${latest}</tspan></text>`;
     return s;
   }
 
@@ -686,9 +853,8 @@ function renderChart(rows) {
     svg += drawPanel(spec, plotTop);
   });
 
-  // X軸ラベル(最下段)
   for (const i of xLabels) {
-    svg += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="${cMuted}">${shortDate(data[i].date)}</text>`;
+    svg += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10.5" fill="${cMuted}">${shortDate(data[i].date)}</text>`;
   }
 
   // ホバー: 全パネルをまたぐ縦線 + 各ラインのドット
@@ -696,7 +862,7 @@ function renderChart(rows) {
   const crossBottom = panels[specs[specs.length - 1].key].plotBottom;
   svg += `<line id="chartCross" x1="0" y1="${crossTop}" x2="0" y2="${crossBottom}" stroke="${cMuted}" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"/>`;
   for (const spec of specs) {
-    svg += `<circle id="hover_${spec.key}" r="5" fill="${spec.color}" stroke="${cCard}" stroke-width="2" visibility="hidden"/>`;
+    svg += `<circle id="hover_${spec.key}" r="4.5" fill="${spec.color}" stroke="${cSurface}" stroke-width="2" visibility="hidden"/>`;
   }
   svg += `<rect id="chartOverlay" x="${mL}" y="${crossTop}" width="${iw}" height="${crossBottom - crossTop}" fill="transparent"/>`;
   svg += `</svg>`;
@@ -732,7 +898,7 @@ function renderChart(rows) {
       `<div class="trow"><span><span class="dot" style="background:${cBuy}"></span>買い残</span><b>${fmt(r.buy)}</b></div>` +
       `<div class="trow"><span><span class="dot" style="background:${cSell}"></span>売り残</span><b>${fmt(r.sell)}</b></div>` +
       `<div class="trow"><span>信用倍率</span><b>${r.ratio == null ? "―" : r.ratio.toFixed(2) + " 倍"}</b></div>` +
-      `<div class="trow"><span><span class="dot" style="background:${css.getPropertyValue("--series-price").trim()}"></span>株価</span><b>${r.close == null ? "―" : fmt(r.close) + " 円"}</b></div>`;
+      `<div class="trow"><span><span class="dot" style="background:${cPrice}"></span>株価</span><b>${r.close == null ? "―" : fmt(r.close) + " 円"}</b></div>`;
     tip.style.display = "block";
     const card = tip.parentElement;
     const cardRect = card.getBoundingClientRect();
@@ -758,8 +924,9 @@ window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => renderChart(chartRows), 150);
 });
+// 「自動」のときだけ OS のテーマ変更に追従する
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-  if (chartRows) renderChart(chartRows);
+  if (chartRows && currentTheme() === "auto") renderChart(chartRows);
 });
 
 /* ---- データ取得元の決定 ----
@@ -923,6 +1090,8 @@ $("candidateList").addEventListener("click", (ev) => {
   const li = ev.target.closest("li[data-code]");
   if (li) loadMargin(li.dataset.code);
 });
+
+applyTheme(currentTheme());
 
 // URL パラメータ ?code=7203 で直接表示 (ブックマーク用)
 const initCode = new URLSearchParams(location.search).get("code");

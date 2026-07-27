@@ -1,4 +1,4 @@
-// 株信用チェッカー ローカルサーバー
+// 信用残ウォッチ ローカルサーバー
 // api/ 以下のサーバーレス関数をそのまま呼び出すので、ローカルと本番で挙動が揃う。
 // 依存パッケージなし (Node.js 18+ の標準機能のみ)。
 //
@@ -57,7 +57,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log("");
-  console.log("  株信用チェッカー を起動しました");
+  console.log("  信用残ウォッチ を起動しました");
   console.log(`  ブラウザで http://localhost:${PORT}/ を開いてください`);
   console.log("  終了するにはこのウィンドウを閉じるか Ctrl+C を押してください");
   console.log("");
