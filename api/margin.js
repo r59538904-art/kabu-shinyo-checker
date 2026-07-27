@@ -1,6 +1,6 @@
 // GET /api/margin?code=7203 — 指定銘柄の信用残・株価レンジ・決算日を返す
 const { getMargin } = require("../lib/kabu");
-const { handlePreflight, sendJson } = require("./_cors");
+const { handlePreflight, sendJson } = require("../lib/cors");
 
 module.exports = async (req, res) => {
   if (handlePreflight(req, res)) return;

@@ -88,6 +88,7 @@ window.KABU_API_BASE = "https://kabu-shinyo-checker.vercel.app";
 | `index.html` | 画面(検索欄・カード表示・グラフ・履歴テーブル) |
 | `config.js` | API の URL 設定(空なら保存済みデータモード) |
 | `lib/kabu.js` | データ取得ロジック(ローカル / サーバーレス共通) |
+| `lib/cors.js` | API 共通のヘッダー処理 |
 | `api/margin.js` `api/search.js` | サーバーレス API(Vercel 用) |
 | `server.js` | ローカルサーバー(`api/` を呼び出し + 静的配信) |
 | `scripts/update-data.js` | `data/` の一括更新と `data/index.json` の生成 |

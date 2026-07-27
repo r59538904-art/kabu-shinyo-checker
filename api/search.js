@@ -1,6 +1,6 @@
 // GET /api/search?q=トヨタ — 銘柄名・コードの部分一致で候補を返す
 const { searchStocks } = require("../lib/kabu");
-const { handlePreflight, sendJson } = require("./_cors");
+const { handlePreflight, sendJson } = require("../lib/cors");
 
 module.exports = async (req, res) => {
   if (handlePreflight(req, res)) return;
