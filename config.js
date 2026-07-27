@@ -8,4 +8,4 @@
 //
 // 空のままだと、GitHub Actions が定期取得して data/ に保存したJSONを読む
 // 「保存済みデータ表示モード」で動作します。
-window.KABU_API_BASE = "";
+window.KABU_API_BASE = "https://kabu-shinyo-checker.vercel.app";
