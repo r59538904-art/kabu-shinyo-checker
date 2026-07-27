@@ -2,6 +2,8 @@
 
 銘柄コードまたは銘柄名で検索して、**信用買い残・信用売り残・信用倍率・前週比(株数と%)** を表示するサイトです。信用残の推移グラフ、週次履歴テーブル、株価レンジ(上場来・年初来)、決算発表予定日も表示します。
 
+**公開サイト: https://r59538904-art.github.io/kabu-shinyo-checker/**
+
 ローカル(`node server.js`)でも、GitHub Pages + サーバーレス API でも同じ画面が動きます。
 
 ## 使い方(ローカル)
@@ -20,8 +22,10 @@
 
 | モード | 条件 | できること |
 |---|---|---|
-| **API モード** | localhost で `server.js` 起動中、または `config.js` に API の URL を設定済み | **任意の銘柄をその場で検索・取得**(ローカルと同じ) |
-| **保存済みデータモード** | 上記以外(GitHub Pages に置いただけの状態) | `data/` に保存済みの銘柄のみ表示。GitHub Actions が週次で自動更新 |
+| **API モード** ← 現在 | localhost で `server.js` 起動中、または `config.js` に API の URL を設定済み | **任意の銘柄をその場で検索・取得**(ローカルと同じ) |
+| **保存済みデータモード** | 上記以外、または API に接続できないとき | `data/` に保存済みの銘柄のみ表示。GitHub Actions が週次で自動更新 |
+
+API が落ちていても保存済みデータに自動でフォールバックするので、画面が真っ白になることはありません。
 
 ### 1. GitHub Pages(画面の配信)
 
@@ -31,22 +35,17 @@
 
 この時点では「保存済みデータモード」で動きます(登録済み銘柄の閲覧はできます)。
 
-### 2. API のデプロイ(任意の銘柄を取得できるようにする)
+### 2. API(デプロイ済み)
 
-`api/` 以下は Vercel の Node.js サーバーレス関数としてそのまま動きます。
+`api/` 以下は Vercel の Node.js サーバーレス関数として動いています。
 
-1. [vercel.com](https://vercel.com/new) に GitHub アカウントでログイン
-2. このリポジトリを **Import** → 設定は変更せず **Deploy**
-   (フレームワークは "Other"、ビルドコマンドなしでOK)
-3. 発行された URL(例 `https://kabu-shinyo-checker.vercel.app`)を `config.js` に設定して push
+- エンドポイント: `https://kabu-shinyo-checker.vercel.app/api/margin?code=7203` / `/api/search?q=トヨタ`
+- この URL は `config.js` の `KABU_API_BASE` に設定済みなので、GitHub Pages の画面から任意の銘柄をその場で取得できます
+- CORS を許可しているため別オリジンから呼べます
 
-```js
-// config.js
-window.KABU_API_BASE = "https://kabu-shinyo-checker.vercel.app";
-```
+`main` に push すると Vercel が自動で再デプロイします。
 
-以降、GitHub Pages の画面からも任意の銘柄をその場で取得できます。API は CORS を許可しているので別オリジンから呼べます。
-なお Vercel の URL 自体を直接開いても、画面 + API が揃った同じサイトとして使えます。
+別の環境に置き直す場合は、[vercel.com/new](https://vercel.com/new) でこのリポジトリを Import → 設定変更なしで Deploy し、発行された**本番URL**を `config.js` に設定してください。デプロイごとに発行される `～-<ハッシュ>-<アカウント>.vercel.app` の URL は認証がかかっていて外部から使えないので、短いほうの本番URLを使います。
 
 ## 週次のデータ自動更新
 
