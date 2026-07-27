@@ -11,7 +11,8 @@ module.exports = async (req, res) => {
 
   try {
     const data = await searchStocks(q);
-    return sendJson(res, data, data.error ? 502 : 200);
+    const status = !data.error ? 200 : data.retryable ? 503 : 502;
+    return sendJson(res, data, status);
   } catch (err) {
     console.error(err);
     return sendJson(res, { error: "サーバー内部エラー: " + err.message }, 500);

@@ -13,7 +13,9 @@ module.exports = async (req, res) => {
 
   try {
     const data = await getMargin(code);
-    return sendJson(res, data, data.error ? 404 : 200);
+    // 取得元の一時的な不調は 503 (銘柄が無いわけではない)
+    const status = !data.error ? 200 : data.retryable ? 503 : 404;
+    return sendJson(res, data, status);
   } catch (err) {
     console.error(err);
     return sendJson(res, { error: "サーバー内部エラー: " + err.message }, 500);

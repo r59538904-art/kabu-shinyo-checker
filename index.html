@@ -789,8 +789,9 @@ function savedAtLabel(iso) {
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-// 保存済み JSON (GitHub Actions が定期更新) から表示する
-async function loadSavedMargin(code, apiFailed) {
+// 保存済み JSON (GitHub Actions が定期更新) から表示する。
+// apiError には、API 側で失敗したときにその理由を渡す。
+async function loadSavedMargin(code, apiError) {
   try {
     const res = await fetch(`./data/${encodeURIComponent(code)}.json`, { cache: "no-cache" });
     if (!res.ok) throw new Error("not found");
@@ -798,12 +799,15 @@ async function loadSavedMargin(code, apiFailed) {
     if (!Array.isArray(data.rows) || !data.rows.length) throw new Error("empty");
     if (!data.source) data.source = `https://finance.yahoo.co.jp/quote/${code}.T/margin`;
     const at = savedAtLabel(data.savedAt);
-    setStatus(`保存済みデータを表示しています${at ? ` (最終更新 ${at})` : ""}`);
+    setStatus(
+      (apiError ? apiError + "<br>" : "") +
+        `保存済みデータを表示しています${at ? ` (最終更新 ${at})` : ""}`,
+      !!apiError
+    );
     showResult(data);
   } catch (e) {
     setStatus(
-      (apiFailed ? "API に接続できず、" : "") +
-        `「${code}」の保存済みデータがありません。${USE_API ? "" : API_HINT}`,
+      apiError || `「${code}」の保存済みデータがありません。${USE_API ? "" : API_HINT}`,
       true
     );
   }
@@ -815,18 +819,22 @@ async function loadMargin(code) {
   setStatus(`「${code}」の信用残データを取得中…`, false, true);
 
   if (USE_API) {
+    let apiError = null;
     try {
       const data = await apiGet("/api/margin?code=" + encodeURIComponent(code));
-      if (data.error) { setStatus(data.error, true); return; }
-      setStatus("");
-      showResult(data);
-      return;
+      if (!data.error) {
+        setStatus("");
+        showResult(data);
+        return;
+      }
+      apiError = data.error;
     } catch (e) {
-      // API に届かない場合は保存済みデータで表示を試みる
-      return loadSavedMargin(code, true);
+      apiError = "API に接続できませんでした。";
     }
+    // 取得元が混雑している / API に届かない場合でも、保存済みがあれば表示する
+    return loadSavedMargin(code, apiError);
   }
-  await loadSavedMargin(code, false);
+  await loadSavedMargin(code, null);
 }
 
 function showCandidates(title, results) {
@@ -852,7 +860,7 @@ function loadSavedIndex() {
   return savedIndexPromise;
 }
 
-async function searchSaved(q, apiFailed) {
+async function searchSaved(q, apiError) {
   const list = await loadSavedIndex();
   const needle = q.toLowerCase();
   const hits = list.filter(
@@ -860,14 +868,14 @@ async function searchSaved(q, apiFailed) {
   );
   if (!hits.length) {
     setStatus(
-      (apiFailed ? "API に接続できず、" : "") +
+      (apiError ? apiError + "<br>" : "") +
         `保存済みの銘柄に「${q}」は見つかりませんでした。${USE_API ? "" : API_HINT}`,
       true
     );
     return;
   }
   if (hits.length === 1) return loadMargin(hits[0].code);
-  setStatus("");
+  setStatus(apiError ? apiError + "<br>保存済みの銘柄から表示します" : "", !!apiError);
   showCandidates("保存済みの銘柄から — 銘柄を選択してください", hits);
 }
 
@@ -877,22 +885,26 @@ async function searchByName(q) {
   setStatus(`「${q}」を検索中…`, false, true);
 
   if (USE_API) {
+    let apiError = null;
     try {
       const data = await apiGet("/api/search?q=" + encodeURIComponent(q));
-      if (data.error) { setStatus(data.error, true); return; }
-      if (!data.results.length) {
-        setStatus(`「${q}」に一致する銘柄が見つかりませんでした`, true);
+      if (!data.error) {
+        if (!data.results.length) {
+          setStatus(`「${q}」に一致する銘柄が見つかりませんでした`, true);
+          return;
+        }
+        if (data.results.length === 1) return loadMargin(data.results[0].code);
+        setStatus("");
+        showCandidates("検索結果 — 銘柄を選択してください", data.results);
         return;
       }
-      if (data.results.length === 1) return loadMargin(data.results[0].code);
-      setStatus("");
-      showCandidates("検索結果 — 銘柄を選択してください", data.results);
-      return;
+      apiError = data.error;
     } catch (e) {
-      return searchSaved(q, true);
+      apiError = "API に接続できませんでした。";
     }
+    return searchSaved(q, apiError);
   }
-  await searchSaved(q, false);
+  await searchSaved(q, null);
 }
 
 $("searchForm").addEventListener("submit", (ev) => {

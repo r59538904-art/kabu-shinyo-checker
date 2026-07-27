@@ -10,7 +10,9 @@ const path = require("path");
 const { getMargin, DATA_DIR } = require("../lib/kabu");
 
 const INDEX_FILE = path.join(DATA_DIR, "index.json");
-const SLEEP_MS = 1500; // 取得元に負荷をかけないよう1銘柄ごとに待つ
+// 取得元は IP 単位でレート制限をかけるため、1銘柄ごとに十分間を空ける
+// (1銘柄あたり Yahoo信用残・SBI・株価履歴の3リクエストを投げる)
+const SLEEP_MS = Number(process.env.FETCH_INTERVAL_MS) || 5000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
