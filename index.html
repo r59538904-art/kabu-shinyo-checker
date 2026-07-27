@@ -372,7 +372,20 @@
   td.down { color: var(--down); }
   td .pct { font-size: 11.5px; opacity: .85; margin-left: 3px; }
 
-  footer.note { margin-top: 20px; color: var(--muted); font-size: 11.5px; line-height: 1.7; }
+  /* ---- 免責 ---- */
+  .disclaimer {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-top: 22px; padding: 12px 15px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--muted); font-size: 11.5px; line-height: 1.7;
+  }
+  .disclaimer svg { flex: none; margin-top: 3px; color: var(--axis); }
+  .disclaimer b {
+    display: block; color: var(--text-2);
+    font-size: 12.5px; font-weight: 700; letter-spacing: .01em;
+  }
 </style>
 </head>
 <body>
@@ -540,10 +553,16 @@
       </div>
     </div>
 
-    <footer class="note">
-      データ出典: <a id="srcLink" href="#" target="_blank" rel="noopener">Yahoo!ファイナンス 信用残時系列</a>、
-      株価レンジ・決算予定日は SBI証券。<br>
-      表示は取得時点の情報であり、投資判断は自己責任でお願いします。
+    <footer class="disclaimer">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+           stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M8 1.4 2 3.9v4.3c0 3.2 2.5 5.3 6 6.4 3.5-1.1 6-3.2 6-6.4V3.9L8 1.4Z"/>
+        <path d="M8 5.6v3.1"/><path d="M8 11.1h.01"/>
+      </svg>
+      <p>
+        <b>投資判断はご自身の責任で</b>
+        表示内容は取得時点のものです。正確性・完全性を保証するものではありません。
+      </p>
     </footer>
   </section>
 
@@ -641,7 +660,6 @@ function showResult(data) {
       <td>${r.ratio == null ? "―" : r.ratio.toFixed(2)}</td>
     </tr>`).join("");
 
-  $("srcLink").href = data.source;
   $("result").style.display = "block";
   renderChart(data.rows.slice(0, 52)); // グラフは直近1年分まで
 }
