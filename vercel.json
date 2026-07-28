@@ -1,5 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "//": "取得元が日本のサイトなので、関数の実行も東京 (hnd1) に置く",
+  "regions": ["hnd1"],
   "functions": {
     "api/*.js": {
       "maxDuration": 20,

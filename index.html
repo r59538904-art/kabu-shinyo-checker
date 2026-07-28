@@ -1029,7 +1029,13 @@ async function loadMargin(code) {
     try {
       const data = await apiGet("/api/margin?code=" + encodeURIComponent(code));
       if (!data.error) {
-        setStatus("");
+        // stale = 取得元が混雑していたため API 側が保存済みを返した
+        const at = data.stale ? savedAtLabel(data.savedAt) : "";
+        setStatus(
+          data.stale
+            ? `取得元が混み合っているため、保存済みデータを表示しています${at ? ` (最終更新 ${at})` : ""}`
+            : ""
+        );
         showResult(data);
         return;
       }
