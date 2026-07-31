@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://r59538904-art.github.io/kabu-shinyo-checker/sitemap.xml

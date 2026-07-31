@@ -5,6 +5,60 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>信用残ウォッチ｜信用残・信用倍率をひと目で</title>
 <meta name="description" content="銘柄の信用買い残・売り残・信用倍率・前週比を、推移グラフと週次履歴でまとめて確認できます。">
+
+<!-- 静的配信 (GitHub Pages) ではレスポンスヘッダーを設定できないため、
+     指定できる範囲を meta で補う。frame-ancestors は meta では無効。 -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data:;
+  connect-src 'self' https://kabu-shinyo-checker.vercel.app;
+  object-src 'none';
+  base-uri 'none';
+  form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+
+<link rel="canonical" href="https://r59538904-art.github.io/kabu-shinyo-checker/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+
+<!-- 初回検索は API へ接続するので、その分の接続確立を先に済ませておく -->
+<link rel="preconnect" href="https://kabu-shinyo-checker.vercel.app" crossorigin>
+<link rel="dns-prefetch" href="https://kabu-shinyo-checker.vercel.app">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="信用残ウォッチ">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:title" content="信用残ウォッチ｜信用残・信用倍率をひと目で">
+<meta property="og:description" content="銘柄の信用買い残・売り残・信用倍率・前週比を、推移グラフと週次履歴でまとめて確認できます。">
+<meta property="og:url" content="https://r59538904-art.github.io/kabu-shinyo-checker/">
+<meta property="og:image" content="https://r59538904-art.github.io/kabu-shinyo-checker/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="信用残ウォッチ — 信用買い残・売り残・信用倍率を表示するサイト">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="信用残ウォッチ｜信用残・信用倍率をひと目で">
+<meta name="twitter:description" content="銘柄の信用買い残・売り残・信用倍率・前週比を、推移グラフと週次履歴でまとめて確認できます。">
+<meta name="twitter:image" content="https://r59538904-art.github.io/kabu-shinyo-checker/og.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "信用残ウォッチ",
+  "alternateName": "Margin Balance Watch",
+  "url": "https://r59538904-art.github.io/kabu-shinyo-checker/",
+  "description": "銘柄の信用買い残・売り残・信用倍率・前週比を、推移グラフと週次履歴でまとめて確認できるサイト。",
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "Web",
+  "inLanguage": "ja",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "JPY" }
+}
+</script>
 <script>
   // テーマは描画前に確定させる (切り替え時のちらつき防止)。既定はダーク。
   // ?theme=light|dark|auto を付ければその場で指定できる。
@@ -27,7 +81,9 @@
     --surface-2:  #f2f1ed;   /* 一段沈めた面 */
     --text:       #0b0b0b;
     --text-2:     #52514e;
-    --muted:      #898781;
+    /* 本文に使うため WCAG AA (4.5:1) を満たす濃さにしている。
+       #898781 はグラフ軸ラベル用の明度で、テキストだと 3.4:1 しか出ない。 */
+    --muted:      #6b6a64;
     --grid:       #e1e0d9;
     --axis:       #c3c2b7;
     --line:       rgba(11, 11, 11, .10);
@@ -35,6 +91,10 @@
     --accent:     #2a78d6;
     --accent-ink: #ffffff;
     --accent-soft:#e8f0fc;
+    --accent-badge:#1c5cab;   /* accent-soft 上の文字用 (accent だと 3.9:1) */
+    --accent-strong:#256abf;  /* 白文字を載せる面用 (accent だと 4.4:1) */
+    --up-ink:     #c22f2f;    /* up-soft 上の文字用 (up だと 4.1:1) */
+    --down-ink:   #006300;
     --up:         #d03b3b;   /* 増加 = 赤 (国内慣習) */
     --up-soft:    #fbeaea;
     --down:       #006300;   /* 減少 = 緑 */
@@ -62,6 +122,10 @@
       --accent:     #3987e5;
       --accent-ink: #06111f;
       --accent-soft:#16283f;
+      --accent-badge:#6da7ec;
+      --accent-strong:#3987e5;
+      --up-ink:     #e66767;
+      --down-ink:   #0ca30c;
       --up:         #e66767;
       --up-soft:    #33201f;
       --down:       #0ca30c;
@@ -88,6 +152,10 @@
     --accent:     #3987e5;
     --accent-ink: #06111f;
     --accent-soft:#16283f;
+    --accent-badge:#6da7ec;
+    --accent-strong:#3987e5;
+    --up-ink:     #e66767;
+    --down-ink:   #0ca30c;
     --up:         #e66767;
     --up-soft:    #33201f;
     --down:       #0ca30c;
@@ -109,7 +177,31 @@
     min-height: 100vh;
     font-feature-settings: "palt" 1;
   }
-  a { color: var(--accent); }
+  a { color: var(--accent-strong); }
+
+  /* キーボード操作時のフォーカス位置を明示する (マウス操作時は出さない) */
+  :where(a, button, input, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* 視覚的には隠すがスクリーンリーダーには読ませる */
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px;
+    margin: -1px; padding: 0; border: 0;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
+
+  /* 動きを減らす設定の環境ではアニメーションを止める */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 
   /* ---- 上部バー ---- */
   .topbar {
@@ -173,7 +265,7 @@
   }
   .searchbox input::placeholder { color: var(--muted); }
   .searchbox button {
-    border: none; background: var(--accent); color: var(--accent-ink);
+    border: none; background: var(--accent-strong); color: var(--accent-ink);
     font: inherit; font-size: 14px; font-weight: 700;
     padding: 9px 20px; border-radius: 9px; cursor: pointer;
   }
@@ -199,16 +291,20 @@
     letter-spacing: .08em; font-weight: 700;
   }
   .candidates ul { list-style: none; display: grid; gap: 6px; }
-  .candidates li {
+  /* キーボードでも選べるよう、行そのものを button にしている */
+  .candidates button {
+    appearance: none; width: 100%; font: inherit; text-align: left;
+    color: var(--text);
     background: var(--surface);
     border: 1px solid var(--line-solid);
-    border-radius: 10px; padding: 11px 14px; cursor: pointer;
+    border-radius: 10px; padding: 12px 14px; cursor: pointer;
     display: flex; align-items: center; gap: 12px;
+    min-height: 44px;   /* スマホでのタップ領域を確保 */
   }
-  .candidates li:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .candidates button:hover { border-color: var(--accent); background: var(--accent-soft); }
   .ccode {
     font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px;
-    color: var(--accent); background: var(--accent-soft);
+    color: var(--accent-badge); background: var(--accent-soft);
     border-radius: 6px; padding: 2px 9px; flex: none;
   }
   .cname { flex: 1; font-weight: 600; font-size: 14px; min-width: 0; }
@@ -224,7 +320,7 @@
   .stockhead .scode {
     font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 700;
     letter-spacing: .06em;
-    color: var(--accent); background: var(--accent-soft);
+    color: var(--accent-badge); background: var(--accent-soft);
     border-radius: 6px; padding: 3px 10px;
   }
   .stockhead .sname { font-size: 22px; font-weight: 700; letter-spacing: .01em; }
@@ -249,7 +345,7 @@
     font-size: 12px; font-weight: 700; color: var(--text-2);
     background: var(--surface-2); border-radius: 6px; padding: 2px 9px;
   }
-  .earnings-countdown.soon { color: var(--up); background: var(--up-soft); }
+  .earnings-countdown.soon { color: var(--up-ink); background: var(--up-soft); }
 
   /* ---- 数値タイル ---- */
   .tiles {
@@ -281,8 +377,8 @@
     font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
     border-radius: 6px; padding: 2px 8px;
   }
-  .chip.up   { color: var(--up);    background: var(--up-soft); }
-  .chip.down { color: var(--down);  background: var(--down-soft); }
+  .chip.up   { color: var(--up-ink);   background: var(--up-soft); }
+  .chip.down { color: var(--down-ink); background: var(--down-soft); }
   .chip.flat { color: var(--text-2); background: var(--surface-2); }
 
   /* ---- 株価レンジ ---- */
@@ -302,8 +398,8 @@
   .range-vals { display: flex; flex-wrap: wrap; gap: 8px 26px; }
   .range-item { display: flex; align-items: baseline; gap: 7px; }
   .range-tag { font-size: 11px; font-weight: 700; border-radius: 5px; padding: 2px 7px; }
-  .range-tag.high { color: var(--up);   background: var(--up-soft); }
-  .range-tag.low  { color: var(--down); background: var(--down-soft); }
+  .range-tag.high { color: var(--up-ink);   background: var(--up-soft); }
+  .range-tag.low  { color: var(--down-ink); background: var(--down-soft); }
   .range-price { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
   .range-price::after {
     content: "円"; font-size: 11px; font-weight: 600; color: var(--muted); margin-left: 2px;
@@ -370,9 +466,10 @@
   tbody tr:hover { background: var(--surface-2); }
   td.up { color: var(--up); }
   td.down { color: var(--down); }
-  td .pct { font-size: 11.5px; opacity: .85; margin-left: 3px; }
-  td .pct.up   { color: var(--up);   opacity: 1; }
-  td .pct.down { color: var(--down); opacity: 1; }
+  /* opacity で薄めるとコントラストが 4.5:1 を割るため、サイズ差だけで従属を示す */
+  td .pct { font-size: 11.5px; margin-left: 3px; }
+  td .pct.up   { color: var(--up); }
+  td .pct.down { color: var(--down); }
 
   /* ---- 免責 ---- */
   .disclaimer {
@@ -420,21 +517,24 @@
   </div>
 </header>
 
-<div class="wrap">
+<main class="wrap">
 
   <div class="lede">
     <h1>信用買い残・売り残・信用倍率をひと目で</h1>
     <p>銘柄コードか銘柄名を入れると、前週比・推移グラフ・週次履歴まで表示します</p>
   </div>
 
-  <form class="searchbox" id="searchForm">
-    <input id="searchInput" type="text" placeholder="銘柄コード または 銘柄名 (例: 7203 / トヨタ)"
-           autocomplete="off" autofocus>
+  <form class="searchbox" id="searchForm" role="search">
+    <label class="visually-hidden" for="searchInput">銘柄コードまたは銘柄名</label>
+    <input id="searchInput" type="search" name="q" enterkeyhint="search"
+           placeholder="銘柄コード または 銘柄名 (例: 7203 / トヨタ)"
+           autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
     <button type="submit">検索</button>
   </form>
-  <p class="hint">※ 信用残データは東証発表にもとづく週1回(毎週第2営業日ごろ)の更新です</p>
+  <p class="hint" id="searchHint">※ 信用残データは東証発表にもとづく週1回(毎週第2営業日ごろ)の更新です</p>
 
-  <div class="status" id="status"></div>
+  <!-- 取得中・エラー・フォールバックの案内を読み上げさせる -->
+  <div class="status" id="status" role="status" aria-live="polite"></div>
 
   <section class="candidates" id="candidates">
     <h2 id="candidatesTitle">検索結果 — 銘柄を選択してください</h2>
@@ -541,6 +641,9 @@
       <h2 class="sec-title">信用残の推移 (週次・直近26週)</h2>
       <div class="tablewrap">
         <table>
+          <caption class="visually-hidden">
+            信用残の週次推移。日付、株価(終値)、買い残、買い残の前週比、売り残、売り残の前週比、信用倍率の順。
+          </caption>
           <thead>
             <tr>
               <th style="text-align:left">日付</th>
@@ -570,12 +673,28 @@
     </footer>
   </section>
 
-</div>
+</main>
 
 <script src="config.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n == null ? "―" : n.toLocaleString("ja-JP");
+
+// 表示上の定数
+const TABLE_WEEKS = 26;   // 履歴テーブルに出す週数
+const CHART_WEEKS = 52;   // グラフに出す週数
+const RESIZE_DEBOUNCE_MS = 150;
+
+// innerHTML に入れる動的な文字列はここを通す。
+// 検索語はユーザー入力、銘柄名などは取得元由来の文字列なのでそのままでは危険。
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 /* ---- テーマ切り替え (自動 / ライト / ダーク) ---- */
 const THEME_KEY = "kabu-theme";
@@ -672,7 +791,7 @@ function showResult(data) {
 
   $("historyBody").innerHTML = data.rows.slice(0, 26).map((r, i) => `
     <tr>
-      <th>${r.date}</th>
+      <th>${esc(r.date)}</th>
       <td>${r.close == null ? "―" : fmt(r.close) + " 円"}</td>
       <td>${fmt(r.buy)}</td>
       ${changeCell(r.buyChange, r.buyPct)}
@@ -933,7 +1052,7 @@ function renderChart(rows) {
     }
 
     tip.innerHTML =
-      `<div class="tdate">${r.date}</div>` +
+      `<div class="tdate">${esc(r.date)}</div>` +
       `<div class="trow"><span><span class="dot" style="background:${cBuy}"></span>買い残</span><b>${fmt(r.buy)}</b></div>` +
       `<div class="trow"><span><span class="dot" style="background:${cSell}"></span>売り残</span><b>${fmt(r.sell)}</b></div>` +
       `<div class="trow"><span>信用倍率</span><b>${r.ratio == null ? "―" : r.ratio.toFixed(2) + " 倍"}</b></div>` +
@@ -1013,7 +1132,7 @@ async function loadSavedMargin(code, apiError) {
     showResult(data);
   } catch (e) {
     setStatus(
-      apiError || `「${code}」の保存済みデータがありません。${USE_API ? "" : API_HINT}`,
+      apiError || `「${esc(code)}」の保存済みデータがありません。${USE_API ? "" : API_HINT}`,
       true
     );
   }
@@ -1022,7 +1141,7 @@ async function loadSavedMargin(code, apiError) {
 async function loadMargin(code) {
   $("candidates").style.display = "none";
   $("result").style.display = "none";
-  setStatus(`「${code}」の信用残データを取得中…`, false, true);
+  setStatus(`「${esc(code)}」の信用残データを取得中…`, false, true);
 
   if (USE_API) {
     let apiError = null;
@@ -1051,11 +1170,14 @@ async function loadMargin(code) {
 
 function showCandidates(title, results) {
   $("candidatesTitle").textContent = title;
+  // 銘柄名は取得元由来の文字列なのでエスケープしてから埋め込む
   $("candidateList").innerHTML = results.map((r) => `
-    <li data-code="${r.code}">
-      <span class="ccode">${r.code}</span>
-      <span class="cname">${r.name}</span>
-      <span class="cmarket">${r.market || ""}</span>
+    <li>
+      <button type="button" data-code="${esc(r.code)}">
+        <span class="ccode">${esc(r.code)}</span>
+        <span class="cname">${esc(r.name)}</span>
+        <span class="cmarket">${esc(r.market || "")}</span>
+      </button>
     </li>`).join("");
   $("candidates").style.display = "block";
 }
@@ -1081,7 +1203,7 @@ async function searchSaved(q, apiError) {
   if (!hits.length) {
     setStatus(
       (apiError ? apiError + "<br>" : "") +
-        `保存済みの銘柄に「${q}」は見つかりませんでした。${USE_API ? "" : API_HINT}`,
+        `保存済みの銘柄に「${esc(q)}」は見つかりませんでした。${USE_API ? "" : API_HINT}`,
       true
     );
     return;
@@ -1094,7 +1216,7 @@ async function searchSaved(q, apiError) {
 async function searchByName(q) {
   $("candidates").style.display = "none";
   $("result").style.display = "none";
-  setStatus(`「${q}」を検索中…`, false, true);
+  setStatus(`「${esc(q)}」を検索中…`, false, true);
 
   if (USE_API) {
     let apiError = null;
@@ -1102,7 +1224,7 @@ async function searchByName(q) {
       const data = await apiGet("/api/search?q=" + encodeURIComponent(q));
       if (!data.error) {
         if (!data.results.length) {
-          setStatus(`「${q}」に一致する銘柄が見つかりませんでした`, true);
+          setStatus(`「${esc(q)}」に一致する銘柄が見つかりませんでした`, true);
           return;
         }
         if (data.results.length === 1) return loadMargin(data.results[0].code);
@@ -1131,9 +1253,10 @@ $("searchForm").addEventListener("submit", (ev) => {
   }
 });
 
+// 行は button なので Enter / Space でも選べる (クリックは委譲で1つだけ登録)
 $("candidateList").addEventListener("click", (ev) => {
-  const li = ev.target.closest("li[data-code]");
-  if (li) loadMargin(li.dataset.code);
+  const btn = ev.target.closest("button[data-code]");
+  if (btn) loadMargin(btn.dataset.code);
 });
 
 applyTheme(currentTheme());
