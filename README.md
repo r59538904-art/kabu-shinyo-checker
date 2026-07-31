@@ -6,15 +6,28 @@
 
 ローカル(`node server.js`)でも、GitHub Pages + サーバーレス API でも同じ画面が動きます。
 
-## 使い方(ローカル)
+## 更新状況の確認
 
-1. `start.bat` をダブルクリック
-2. ブラウザで http://localhost:3690/ が開きます
-3. 検索欄に銘柄コード(例: `7203`)か銘柄名(例: `トヨタ`)を入力して検索
+| 種別 | 確認先 |
+|---|---|
+| コードの最終更新 | [CHANGELOG.md](CHANGELOG.md) の最上段、または [version.json](version.json) の `code.updatedAt` |
+| データの最終取得 | [version.json](version.json) の `data.fetchedAt` と `latestMarginWeek` |
 
-終了するには、サーバーの黒いウィンドウを閉じてください。手動起動する場合は `node server.js`。
+`data/` は毎週 GitHub Actions が自動でコミットするため git log がデータ更新で埋まります。`version.json` はコードとデータの更新を分けて記録していて、デプロイのたびに自動生成されます。
+
+## ローカルで動かす(開発・確認用)
+
+```
+npm start        # http://localhost:3690/ で起動
+```
 
 必要なもの: **Node.js 18 以上**(追加パッケージは不要)
+
+公開サイトがあるので普段は不要ですが、次の場合に使います。
+
+- 変更をデプロイ前に確認する
+- 取得元が本番(クラウドIP)をレート制限しているとき、自宅のIPから取得する
+  (`npm run update-data` で `data/` を更新して push する)
 
 ## 公開する(デプロイ)
 
@@ -95,8 +108,10 @@ API が落ちていても保存済みデータに自動でフォールバック�
 | `api/margin.js` `api/search.js` | サーバーレス API(Vercel 用) |
 | `server.js` | ローカルサーバー(`api/` を呼び出し + 静的配信) |
 | `scripts/update-data.js` | `data/` の一括更新と `data/index.json` の生成 |
+| `scripts/build-seo.js` | `sitemap.xml` の生成 |
+| `scripts/build-version.js` | `version.json` の生成(コード/データの最終更新) |
 | `data/` | 銘柄ごとの週次データ蓄積先 + 一覧 `index.json` |
-| `start.bat` | ローカル起動用ショートカット |
+| `CHANGELOG.md` | コード変更の履歴(データ更新は含めない) |
 | `.github/workflows/` | Pages デプロイ / 週次データ更新 |
 
 ## 今後の拡張候補(ロードマップ)

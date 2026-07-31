@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "update-data": "node scripts/update-data.js",
-    "build-seo": "node scripts/build-seo.js"
+    "build-seo": "node scripts/build-seo.js",
+    "build-version": "node scripts/build-version.js"
   },
   "engines": {
     "node": "22.x"

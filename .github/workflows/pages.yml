@@ -35,12 +35,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # version.json の生成に履歴が必要
+
+      - name: version.json を生成 (コード/データの最終更新日時)
+        run: node scripts/build-version.js
 
       - name: 配信するファイルだけ _site にまとめる
         run: |
           mkdir -p _site
           cp index.html config.js favicon.svg apple-touch-icon.png og.png \
-             robots.txt sitemap.xml _site/
+             robots.txt sitemap.xml version.json _site/
           cp -r data _site/data
           touch _site/.nojekyll
 

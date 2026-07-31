@@ -1,0 +1,12 @@
+{
+  "code": {
+    "updatedAt": "2026-07-31T15:56:31+09:00",
+    "commit": "fab15a2",
+    "subject": "vercel: 不正なキー \"//\" を削除してデプロイ失敗を解消"
+  },
+  "data": {
+    "fetchedAt": "2026-07-30T10:04:34.025Z",
+    "latestMarginWeek": "2026/7/24",
+    "stockCount": 21
+  }
+}

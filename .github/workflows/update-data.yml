@@ -27,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # version.json がコードの最終更新コミットを辿るのに必要
 
       - uses: actions/setup-node@v4
         with:
@@ -38,17 +40,19 @@ jobs:
           CODES: ${{ github.event.inputs.codes }}
         run: node scripts/update-data.js "$CODES"
 
-      - name: sitemap.xml を作り直す
-        run: node scripts/build-seo.js
+      - name: sitemap.xml と version.json を作り直す
+        run: |
+          node scripts/build-seo.js
+          node scripts/build-version.js
 
       - name: 変更があればコミット
         run: |
-          if [ -z "$(git status --porcelain data sitemap.xml)" ]; then
+          if [ -z "$(git status --porcelain data sitemap.xml version.json)" ]; then
             echo "更新はありませんでした"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data sitemap.xml
+          git add data sitemap.xml version.json
           git commit -m "data: 信用残データを更新 ($(date -u '+%Y-%m-%d'))"
           git push
