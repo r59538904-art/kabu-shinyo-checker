@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "//": "取得元が日本のサイトなので、関数の実行も東京 (hnd1) に置きたい。無料プランでは反映されない場合がある。",
-  "regions": ["hnd1"],
+  "//": "regions での東京(hnd1)指定は無料プランでビルドが通らずデプロイが止まるため外した。実行は既定リージョンのまま。",
   "functions": {
     "api/*.js": {
       "maxDuration": 20,
