@@ -208,9 +208,18 @@
     position: sticky; top: 0; z-index: 20;
     display: flex; align-items: center; gap: 12px;
     padding: 10px 16px;
-    background: color-mix(in srgb, var(--plane) 88%, transparent);
-    backdrop-filter: saturate(160%) blur(10px);
+    /* 不透明の地色を先に置く。color-mix / backdrop-filter 非対応でも
+       背景が透けて文字が読めなくなることがない (Safari 16.1 以前など)。 */
+    background: var(--plane);
     border-bottom: 1px solid var(--line);
+  }
+  @supports (background: color-mix(in srgb, red 50%, transparent)) and
+            ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .topbar {
+      background: color-mix(in srgb, var(--plane) 88%, transparent);
+      -webkit-backdrop-filter: saturate(160%) blur(10px);
+      backdrop-filter: saturate(160%) blur(10px);
+    }
   }
   .brand { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
   .brand .mark { flex: none; align-self: center; display: block; }
@@ -497,7 +506,8 @@
       <rect x="13.6" y="1" width="3.4" height="16" rx="1.2" fill="var(--series-price)"/>
     </svg>
     <span class="bname">信用残ウォッチ</span>
-    <span class="bsub">Margin Balance Watch</span>
+    <!-- 英字は読み上げを英語にする (日本語音声で綴り読みされるのを防ぐ) -->
+    <span class="bsub" lang="en">Margin Balance Watch</span>
   </div>
   <div class="themetoggle" id="themeToggle" role="group" aria-label="表示テーマ">
     <button type="button" data-set-theme="auto" title="OS の設定に合わせる">自動</button>
@@ -681,9 +691,16 @@ const $ = (id) => document.getElementById(id);
 const fmt = (n) => n == null ? "―" : n.toLocaleString("ja-JP");
 
 // 表示上の定数
-const TABLE_WEEKS = 26;   // 履歴テーブルに出す週数
-const CHART_WEEKS = 52;   // グラフに出す週数
-const RESIZE_DEBOUNCE_MS = 150;
+const TABLE_WEEKS = 26;          // 履歴テーブルに出す週数
+const CHART_WEEKS = 52;          // グラフに出す週数
+const RESIZE_DEBOUNCE_MS = 150;  // リサイズ後にグラフを描き直すまでの待ち
+const REQUEST_TIMEOUT_MS = 15000;
+
+// 検索を連続で実行したとき、遅れて返ってきた古い結果が新しい表示を
+// 上書きしないようにする世代番号。取得を始めるたびに繰り上げる。
+let requestSeq = 0;
+const startRequest = () => ++requestSeq;
+const isStale = (seq) => seq !== requestSeq;
 
 // innerHTML に入れる動的な文字列はここを通す。
 // 検索語はユーザー入力、銘柄名などは取得元由来の文字列なのでそのままでは危険。
@@ -789,7 +806,7 @@ function showResult(data) {
   chip($("ratioChg"), ratioDiff(latest, prev), " 倍", 2);
   $("ratioPrev").textContent = prev && prev.ratio != null ? prev.ratio.toFixed(2) + " 倍" : "―";
 
-  $("historyBody").innerHTML = data.rows.slice(0, 26).map((r, i) => `
+  $("historyBody").innerHTML = data.rows.slice(0, TABLE_WEEKS).map((r, i) => `
     <tr>
       <th>${esc(r.date)}</th>
       <td>${r.close == null ? "―" : fmt(r.close) + " 円"}</td>
@@ -801,7 +818,7 @@ function showResult(data) {
     </tr>`).join("");
 
   $("result").style.display = "block";
-  renderChart(data.rows.slice(0, 52)); // グラフは直近1年分まで
+  renderChart(data.rows.slice(0, CHART_WEEKS));
 }
 
 /* ---- 決算発表予定日 ---- */
@@ -1080,7 +1097,7 @@ let resizeTimer = null;
 window.addEventListener("resize", () => {
   if (!chartRows) return;
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => renderChart(chartRows), 150);
+  resizeTimer = setTimeout(() => renderChart(chartRows), RESIZE_DEBOUNCE_MS);
 });
 // 「自動」のときだけ OS のテーマ変更に追従する
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
@@ -1095,13 +1112,24 @@ const IS_LOCAL = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
 const API_BASE = (IS_LOCAL ? "" : (window.KABU_API_BASE || "")).replace(/\/+$/, "");
 const USE_API = IS_LOCAL || API_BASE !== "";
 
+// 応答が返らないまま読み込み表示が残り続けるのを防ぐ
 async function apiGet(path) {
-  const res = await fetch(API_BASE + path);
+  const res = await fetch(API_BASE + path, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
   // API が無いホスティングでは 404 の HTML が返るため、JSON 以外は失敗扱いにする
   if (!(res.headers.get("content-type") || "").includes("application/json")) {
     throw new Error("API に接続できませんでした");
   }
   return res.json();
+}
+
+// 通信失敗の理由を画面向けの文言にする
+function requestErrorMessage(e) {
+  if (e && (e.name === "TimeoutError" || e.name === "AbortError")) {
+    return `応答がないため中断しました (${REQUEST_TIMEOUT_MS / 1000}秒)。`;
+  }
+  return "API に接続できませんでした。";
 }
 
 const API_HINT = "任意の銘柄をその場で取得するには API のデプロイが必要です (README を参照)。";
@@ -1116,11 +1144,21 @@ function savedAtLabel(iso) {
 
 // 保存済み JSON (GitHub Actions が定期更新) から表示する。
 // apiError には、API 側で失敗したときにその理由を渡す。
-async function loadSavedMargin(code, apiError) {
+async function loadSavedMargin(code, apiError, seq) {
   try {
-    const res = await fetch(`./data/${encodeURIComponent(code)}.json`, { cache: "no-cache" });
+    // 一覧に無い銘柄は保存ファイルも無い。取りに行かずに済ませる
+    // (無駄なリクエストと、コンソールに出る 404 を防ぐ)
+    const saved = await loadSavedIndex();
+    if (isStale(seq)) return;
+    if (saved.length && !saved.some((s) => s.code === code)) throw new Error("not saved");
+
+    const res = await fetch(`./data/${encodeURIComponent(code)}.json`, {
+      cache: "no-cache",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!res.ok) throw new Error("not found");
     const data = await res.json();
+    if (isStale(seq)) return;   // 別の検索が始まっていたら描画しない
     if (!Array.isArray(data.rows) || !data.rows.length) throw new Error("empty");
     if (!data.source) data.source = `https://finance.yahoo.co.jp/quote/${code}.T/margin`;
     const at = savedAtLabel(data.savedAt);
@@ -1131,6 +1169,7 @@ async function loadSavedMargin(code, apiError) {
     );
     showResult(data);
   } catch (e) {
+    if (isStale(seq)) return;
     setStatus(
       apiError || `「${esc(code)}」の保存済みデータがありません。${USE_API ? "" : API_HINT}`,
       true
@@ -1139,6 +1178,7 @@ async function loadSavedMargin(code, apiError) {
 }
 
 async function loadMargin(code) {
+  const seq = startRequest();
   $("candidates").style.display = "none";
   $("result").style.display = "none";
   setStatus(`「${esc(code)}」の信用残データを取得中…`, false, true);
@@ -1147,6 +1187,7 @@ async function loadMargin(code) {
     let apiError = null;
     try {
       const data = await apiGet("/api/margin?code=" + encodeURIComponent(code));
+      if (isStale(seq)) return;   // 別の検索が始まっていたら描画しない
       if (!data.error) {
         // stale = 取得元が混雑していたため API 側が保存済みを返した
         const at = data.stale ? savedAtLabel(data.savedAt) : "";
@@ -1160,12 +1201,13 @@ async function loadMargin(code) {
       }
       apiError = data.error;
     } catch (e) {
-      apiError = "API に接続できませんでした。";
+      if (isStale(seq)) return;
+      apiError = requestErrorMessage(e);
     }
     // 取得元が混雑している / API に届かない場合でも、保存済みがあれば表示する
-    return loadSavedMargin(code, apiError);
+    return loadSavedMargin(code, apiError, seq);
   }
-  await loadSavedMargin(code, null);
+  await loadSavedMargin(code, null, seq);
 }
 
 function showCandidates(title, results) {
@@ -1194,8 +1236,9 @@ function loadSavedIndex() {
   return savedIndexPromise;
 }
 
-async function searchSaved(q, apiError) {
+async function searchSaved(q, apiError, seq) {
   const list = await loadSavedIndex();
+  if (isStale(seq)) return;   // 別の検索が始まっていたら描画しない
   const needle = q.toLowerCase();
   const hits = list.filter(
     (s) => s.code.toLowerCase().includes(needle) || (s.name || "").toLowerCase().includes(needle)
@@ -1214,6 +1257,7 @@ async function searchSaved(q, apiError) {
 }
 
 async function searchByName(q) {
+  const seq = startRequest();
   $("candidates").style.display = "none";
   $("result").style.display = "none";
   setStatus(`「${esc(q)}」を検索中…`, false, true);
@@ -1222,6 +1266,7 @@ async function searchByName(q) {
     let apiError = null;
     try {
       const data = await apiGet("/api/search?q=" + encodeURIComponent(q));
+      if (isStale(seq)) return;   // 別の検索が始まっていたら描画しない
       if (!data.error) {
         if (!data.results.length) {
           setStatus(`「${esc(q)}」に一致する銘柄が見つかりませんでした`, true);
@@ -1234,11 +1279,12 @@ async function searchByName(q) {
       }
       apiError = data.error;
     } catch (e) {
-      apiError = "API に接続できませんでした。";
+      if (isStale(seq)) return;
+      apiError = requestErrorMessage(e);
     }
-    return searchSaved(q, apiError);
+    return searchSaved(q, apiError, seq);
   }
-  await searchSaved(q, null);
+  await searchSaved(q, null, seq);
 }
 
 $("searchForm").addEventListener("submit", (ev) => {
